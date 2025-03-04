@@ -1,0 +1,18 @@
+# Environnement virtuel
+venv/
+.env
+
+# Fichiers Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Base de données locale
+db.sqlite3
+
+# Fichiers de logs
+*.log
+
+# Node.js et React
+node_modules/
+build/
