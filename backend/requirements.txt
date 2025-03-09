@@ -1,0 +1,50 @@
+Ce projet est une plateforme intelligente d'évaluation automatisée des exercices de bases de données.
+Il permet aux professeurs de créer des exercices et aux étudiants de soumettre leurs réponses en PDF.
+L'application intègre une correction automatique avec DeepSeek AI et une détection de plagiat.
+
+Technologies utilisées
+Backend :
+Django (Framework web)
+Django REST Framework (API REST)
+MySQL (Base de données)
+AWS S3 / Firebase (Stockage des fichiers PDF)
+
+Installation et configuration
+
+Cloner le projet:
+git clone https://github.com/FatimataBinetouNdiaye/Projet_SGBD.git
+
+
+Créer et activer l’environnement virtuel
+python -m venv bd_project
+Sous Windows
+.\bd_project\Scripts\activate
+
+Configurer la base de données MySQL
+Modifier backend/plateforme_eval/settings.py
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'projet_BD',
+        'USER': 'root',  # Modifier avec votre utilisateur MySQL
+        'PASSWORD': 'passer123@',
+        'HOST': 'localhost',
+        'PORT': '3306',
+    }
+}
+
+Appliquer les migrations
+python manage.py makemigrations
+python manage.py migrate
+
+Créer un superutilisateur
+python manage.py createsuperuser
+
+Lancer le serveur
+python manage.py runserver
+Accès à l’API REST :
+
+http://127.0.0.1:8000/admin/ (Django Admin)
+http://127.0.0.1:8000/exercices/ (API Exercices)
+http://127.0.0.1:8000/soumissions/ (API Soumissions)
+
