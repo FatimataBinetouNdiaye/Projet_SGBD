@@ -38,6 +38,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'gestion',
+    'social_django',
+    'oauth2_provider',
+    'rest_framework',
+    'rest_framework_social_oauth2',
 ]
 
 MIDDLEWARE = [
@@ -63,6 +67,9 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'social_django.context_processors.backends',
+                'social_django.context_processors.login_redirect',
+
             ],
         },
     },
@@ -87,6 +94,10 @@ DATABASES = {
         'PORT': '3306',              # Le port par défaut de MySQL
     }
 }
+
+
+
+
 
 
 # Password validation
@@ -127,5 +138,20 @@ STATIC_URL = 'static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
+
+AUTHENTICATION_BACKENDS = (
+    'social_core.backends.google.GoogleOAuth2',
+    'social_core.backends.github.GithubOAuth2',
+    'social_core.backends.azuread.AzureADOAuth2',
+    'django.contrib.auth.backends.ModelBackend',
+)
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = "VOTRE_CLIENT_ID"
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = "VOTRE_CLIENT_SECRET"
+
+SOCIAL_AUTH_GITHUB_KEY = "VOTRE_CLIENT_ID"
+SOCIAL_AUTH_GITHUB_SECRET = "VOTRE_CLIENT_SECRET"
+
+SOCIAL_AUTH_AZUREAD_KEY = "VOTRE_CLIENT_ID"
+SOCIAL_AUTH_AZUREAD_SECRET = "VOTRE_CLIENT_SECRET"
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
