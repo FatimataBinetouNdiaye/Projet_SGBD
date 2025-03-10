@@ -70,7 +70,7 @@ const Navbar = () => {
           <div className="space-x-12 hidden lg:flex items-center">
             <RouterLink to="/login" className="text-brandPrimary hover:text-gray-900">Login</RouterLink>
             <button className="bg-brandPrimary text-white py-2 px-4 transition-all duration-300 rounded hover:bg-neutralDGrey">
-              Sign up
+              <RouterLink to="/signup"> Sign up </RouterLink>
             </button>
           </div>
 
