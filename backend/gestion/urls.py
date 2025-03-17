@@ -1,19 +1,12 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ExerciceViewSet, SoumissionViewSet
+from .views import ExerciceViewSet, SoumissionViewSet, UserViewSet
 
-# Création du routeur DRF
 router = DefaultRouter()
 router.register(r'exercices', ExerciceViewSet)
 router.register(r'soumissions', SoumissionViewSet)
+router.register(r'users', UserViewSet)  # 📌 Nouvelle route API pour récupérer les utilisateurs
 
-# Définition des routes
 urlpatterns = [
-    # path('', api_root, name='api-root'),  # Page d'accueil de l'API
-    # path('', include(router.urls)),  # Inclusion des routes DRF
-    path('', include(router.urls)),  # Inclusion automatique des routes API
-
+    path('', include(router.urls)),  # Inclusion des routes API
 ]
-
-
-

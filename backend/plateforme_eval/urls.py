@@ -5,8 +5,6 @@ from django.conf.urls.static import static
 from django.urls import path, include
 
 
-from gestion.views import api_root  
-
 
 urlpatterns = [
       path('admin/', admin.site.urls),
@@ -19,3 +17,6 @@ urlpatterns = [
 # Ajouter cette ligne pour servir les fichiers médias pendant le développement
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+
+

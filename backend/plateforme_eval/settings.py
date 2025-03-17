@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'gestion',
     'rest_framework',
+     'corsheaders',  # Ajout de CORS pour autoriser React
 ]
 
 MIDDLEWARE = [
@@ -49,6 +50,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # Ajout du middleware CORS
+
 ]
 
 ROOT_URLCONF = 'plateforme_eval.urls'
@@ -140,3 +143,6 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.BrowsableAPIRenderer',  # Permet l'affichage HTML
     ],
 }
+
+CORS_ALLOW_ALL_ORIGINS = True  # Autorise toutes les requêtes (pour le développement)
+
