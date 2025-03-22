@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'gestion',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -133,3 +134,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 AUTH_USER_MODEL = 'gestion.User'
 
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',  # Assure une réponse JSON
+        'rest_framework.renderers.BrowsableAPIRenderer',  # Permet l'affichage HTML
+    ],
+}
