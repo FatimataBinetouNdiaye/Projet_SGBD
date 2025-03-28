@@ -2,11 +2,14 @@ from django.contrib import admin
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
+<<<<<<< HEAD
 from django.urls import path, include
 
 
 from gestion.views import api_root  
 
+=======
+>>>>>>> 397dccf (Ajout de la détection de plagiat avec NLP)
 
 urlpatterns = [
       path('admin/', admin.site.urls),

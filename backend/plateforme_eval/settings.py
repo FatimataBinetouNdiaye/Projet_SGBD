@@ -38,7 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'gestion',
-    'rest_framework',
+
 ]
 
 MIDDLEWARE = [
@@ -140,3 +140,4 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.BrowsableAPIRenderer',  # Permet l'affichage HTML
     ],
 }
+
