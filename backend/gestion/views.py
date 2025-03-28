@@ -1,5 +1,5 @@
-<<<<<<< HEAD
 from django.http import JsonResponse
+from django.shortcuts import render
 from rest_framework import viewsets
 from .models import Exercice, Soumission
 from .serializers import ExerciceSerializer, SoumissionSerializer
@@ -20,8 +20,3 @@ class ExerciceViewSet(viewsets.ModelViewSet):
 class SoumissionViewSet(viewsets.ModelViewSet):
     queryset = Soumission.objects.all()
     serializer_class = SoumissionSerializer
-=======
-from django.shortcuts import render
-
-# Create your views here.
->>>>>>> 397dccf (Ajout de la détection de plagiat avec NLP)
