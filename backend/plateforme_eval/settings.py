@@ -81,9 +81,9 @@ WSGI_APPLICATION = 'plateforme_eval.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'projet_BD',
+        'NAME': 'projet_sgbd',
         'USER': 'root',  
-        'PASSWORD': 'passer123@', 
+        'PASSWORD': 'oracle', 
         'HOST': 'localhost',
         'PORT': '3306',
     }
@@ -135,14 +135,29 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-AUTH_USER_MODEL = 'gestion.User'
+AUTH_USER_MODEL = 'gestion.Utilisateur'
 
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',  # Assure une réponse JSON
         'rest_framework.renderers.BrowsableAPIRenderer',  # Permet l'affichage HTML
     ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        # 'rest_framework.permissions.IsAuthenticated',  # ← Commentez ou supprimez cette ligne
+        'rest_framework.permissions.AllowAny',  # ← Autorise tout accès
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+    ],
 }
 
 CORS_ALLOW_ALL_ORIGINS = True  # Autorise toutes les requêtes (pour le développement)
 
+# Paramètres Celery
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Ou l'URL de votre broker
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Europe/Paris'
