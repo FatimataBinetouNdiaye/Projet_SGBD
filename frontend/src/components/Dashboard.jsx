@@ -1,127 +1,77 @@
-import React, { useEffect, useState } from 'react';
-import { BarChart, CheckCircle, Clock, FileText, AlertCircle, TrendingUp } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BarChart, CheckCircle, Clock } from 'lucide-react';
+import axios from 'axios';
+import { format, differenceInDays } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 function Dashboard() {
-  const [stats, setStats] = useState({
-    completedExercises: 0,
-    totalExercises: 0,
-    averageScore: 0,
-    pendingSubmissions: 0,
-    nextDeadline: null,
-    recentSubmissions: []
+  const [dashboardData, setDashboardData] = useState({
+    stats: {
+      completed: 0,
+      total: 0,
+      average_score: 0,
+      next_deadline: null
+    },
+    recent_submissions: []
   });
-  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const navigate = useNavigate();
 
-  // Fonction pour récupérer les données du backend
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const response = await fetch('/api/student/dashboard/', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const response = await axios.get('/api/student/dashboard/');
         
-        if (!response.ok) {
-          if (response.status === 401) {
-            localStorage.removeItem('access_token');
-            navigate('/login');
-            return;
-          }
-          throw new Error(`Erreur HTTP: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        // Transformation des données pour correspondre à l'état local
-        setStats({
-          completedExercises: data.completed_exercises || 0,
-          totalExercises: data.total_exercises || 0,
-          averageScore: parseFloat(data.average_score) || 0,
-          pendingSubmissions: data.pending_submissions || 0,
-          nextDeadline: data.next_deadline || null,
-          recentSubmissions: data.recent_submissions?.map(sub => ({
-            id: sub.id,
-            exercice: {
-              id: sub.exercice.id,
-              titre: sub.exercice.titre,
-              date_limite: sub.exercice.date_limite
-            },
-            note: sub.note,
-            date_soumission: sub.date_soumission,
-            en_retard: sub.en_retard,
-            correction: {
-              est_validee: sub.correction?.est_validee || false,
-              feedback: sub.correction?.feedback || null
-            }
-          })) || []
+        // Normalisation des données avec valeurs par défaut
+        setDashboardData({
+          stats: {
+            completed: response.data.stats?.completed || 0,
+            total: response.data.stats?.total || 0,
+            average_score: response.data.stats?.average_score || 0,
+            next_deadline: response.data.stats?.next_deadline || null
+          },
+          recent_submissions: response.data.recent_submissions || []
         });
       } catch (err) {
-        console.error("Erreur de chargement:", err);
-        setError("Impossible de charger les données. Veuillez réessayer.");
+        console.error('Erreur:', err);
+        setError("Impossible de charger les données");
       } finally {
         setLoading(false);
       }
     };
 
     fetchDashboardData();
-  }, [navigate]);
+  }, []);
 
-  // Fonctions utilitaires
-  const formatDate = (dateString) => {
-    if (!dateString) return "Aucune échéance";
-    const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', {
-      day: 'numeric', 
-      month: 'short', 
-      year: 'numeric',
-      hour: '2-digit', 
-      minute: '2-digit'
-    });
-  };
+  // ... (gardez le reste de votre code de rendu tel quel)
 
-  const daysUntilDeadline = (deadline) => {
-    if (!deadline) return null;
-    const now = new Date();
-    const dueDate = new Date(deadline);
-    const diffTime = Math.max(0, dueDate - now); // Évite les valeurs négatives
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
-
-  // Affichage pendant le chargement
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8 mt-16 text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Chargement de vos données...</p>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
-  // Affichage en cas d'erreur
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8 mt-16 text-center">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-          <strong className="font-bold">Erreur ! </strong>
-          <span className="block sm:inline">{error}</span>
-          <button 
-            onClick={() => window.location.reload()}
-            className="mt-2 px-4 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            Réessayer
-          </button>
+      <div className="bg-red-50 border-l-4 border-red-500 p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="ml-3">
+            <p className="text-sm text-red-700">
+              Erreur: {error}. <button onClick={() => window.location.reload()} className="font-medium underline text-red-700 hover:text-red-600">Réessayer</button>
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Affichage principal
   return (
     <div className="container mx-auto px-4 py-8 space-y-8 mt-16">
       <header className="text-center">
@@ -129,182 +79,96 @@ function Dashboard() {
         <p className="mt-2 text-gray-600">Suivez votre progression et vos soumissions</p>
       </header>
 
-      {/* Cartes de statistiques */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Exercices complétés */}
-        <div 
-          className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:shadow-lg transition-shadow"
-          onClick={() => navigate('/exercises')}
-        >
+      <div className="grid md:grid-cols-3 gap-6">
+        {/* Carte: Exercices complétés */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Exercices complétés</h2>
             <CheckCircle className="h-6 w-6 text-green-500" />
           </div>
           <p className="mt-2 text-3xl font-bold text-gray-900">
-            {stats.completedExercises}/{stats.totalExercises}
+            {dashboardData.stats.completed}
           </p>
-          <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-            <div 
-              className="bg-green-500 h-2.5 rounded-full" 
-              style={{ 
-                width: `${stats.totalExercises > 0 
-                  ? (stats.completedExercises / stats.totalExercises) * 100 
-                  : 0}%` 
-              }}
-            ></div>
-          </div>
           <p className="mt-1 text-sm text-gray-600">
-            {stats.totalExercises > 0 
-              ? `${Math.round((stats.completedExercises / stats.totalExercises) * 100)}% complété` 
-              : 'Aucun exercice disponible'}
+            Sur {dashboardData.stats.total} exercices au total
           </p>
         </div>
 
-        {/* Score moyen */}
+        {/* Carte: Score moyen */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Score moyen</h2>
             <BarChart className="h-6 w-6 text-blue-500" />
           </div>
           <p className="mt-2 text-3xl font-bold text-gray-900">
-            {stats.averageScore.toFixed(1)}/20
+            {dashboardData.stats.average_score.toFixed(1)}/20
           </p>
-          <div className="flex items-center mt-1">
-            <TrendingUp className="h-4 w-4 text-blue-500 mr-1" />
-            <p className="text-sm text-gray-600">
-              {stats.averageScore > 0 
-                ? `+${((stats.averageScore - 10) / 10 * 100).toFixed(1)}% vs moyenne classe` 
-                : 'Données en cours de calcul'}
-            </p>
-          </div>
+          <p className="mt-1 text-sm text-gray-600">Basé sur toutes les soumissions</p>
         </div>
 
-        {/* Prochaine échéance */}
-        <div 
-          className="bg-white p-6 rounded-lg shadow-md cursor-pointer hover:shadow-lg transition-shadow"
-          onClick={() => navigate('/exercises')}
-        >
+        {/* Carte: Prochaine échéance */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Prochaine échéance</h2>
             <Clock className="h-6 w-6 text-orange-500" />
           </div>
-          {stats.nextDeadline ? (
+          {dashboardData.stats.next_deadline ? (
             <>
               <p className="mt-2 text-3xl font-bold text-gray-900">
-                {daysUntilDeadline(stats.nextDeadline)} jour(s)
+                {differenceInDays(
+                  new Date(dashboardData.stats.next_deadline.date_limite), 
+                  new Date()
+                )} jours
               </p>
               <p className="mt-1 text-sm text-gray-600">
-                {formatDate(stats.nextDeadline)}
+                {dashboardData.stats.next_deadline.exercise_title}
               </p>
             </>
           ) : (
-            <p className="mt-2 text-gray-600">Aucune échéance prochaine</p>
+            <p className="mt-2 text-gray-600">Aucune échéance à venir</p>
           )}
-        </div>
-
-        {/* Soumissions en attente */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">En attente de correction</h2>
-            <AlertCircle className="h-6 w-6 text-yellow-500" />
-          </div>
-          <p className="mt-2 text-3xl font-bold text-gray-900">
-            {stats.pendingSubmissions}
-          </p>
-          <p className="mt-1 text-sm text-gray-600">
-            {stats.pendingSubmissions > 0 
-              ? 'Corrections en cours' 
-              : 'Toutes vos soumissions sont corrigées'}
-          </p>
         </div>
       </div>
 
-      {/* Soumissions récentes */}
+      {/* Section: Soumissions récentes */}
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Soumissions récentes</h2>
-          <button 
-            onClick={() => navigate('/submissions')}
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-          >
-            Voir tout →
-          </button>
-        </div>
-        
-        {stats.recentSubmissions.length > 0 ? (
-          <div className="space-y-4">
-            {stats.recentSubmissions.map((submission) => (
-              <div 
-                key={submission.id} 
-                className={`flex items-center justify-between p-4 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${
-                  submission.en_retard ? 'bg-red-50' : 'bg-gray-50'
-                }`}
-                onClick={() => navigate(`/submission/${submission.id}`)}
-              >
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-gray-900 truncate">
-                    {submission.exercice.titre}
-                  </h3>
-                  <div className="flex items-center mt-1 space-x-4 text-sm text-gray-600">
-                    <span>Soumis le {formatDate(submission.date_soumission)}</span>
-                    {submission.en_retard && (
-                      <span className="text-red-500 flex items-center">
-                        <Clock className="h-3 w-3 mr-1" /> En retard
-                      </span>
-                    )}
-                  </div>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Soumissions récentes</h2>
+        <div className="space-y-4">
+          {dashboardData.recent_submissions.length > 0 ? (
+            dashboardData.recent_submissions.map((submission, index) => (
+              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <h3 className="font-medium text-gray-900">{submission.exercise_title}</h3>
+                  <p className="text-sm text-gray-600">
+                    Soumis le {format(new Date(submission.submission_date), 'dd MMM yyyy', { locale: fr })}
+                  </p>
                 </div>
-                <div className="flex items-center ml-4">
-                  {submission.correction?.est_validee ? (
-                    <span className="font-semibold px-3 py-1 rounded-full bg-green-100 text-green-800">
-                      {submission.note}/20
+                <div className="flex items-center">
+                  {submission.score !== null ? (
+                    <span className={`font-semibold ${
+                      submission.score >= 10 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {submission.score}/20
                     </span>
                   ) : (
-                    <span className="font-semibold px-3 py-1 rounded-full bg-yellow-100 text-yellow-800">
-                      En cours
-                    </span>
+                    <span className="text-gray-500">En attente</span>
                   )}
                 </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <FileText className="mx-auto h-12 w-12 text-gray-400" />
-            <p className="mt-2 text-gray-600">Aucune soumission récente</p>
-            <button
-              onClick={() => navigate('/exercises')}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Voir les exercices disponibles
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Suggestions d'amélioration */}
-      {stats.recentSubmissions.some(s => s.correction?.feedback) && (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Suggestions d'amélioration</h2>
-          <div className="space-y-3">
-            {stats.recentSubmissions
-              .filter(s => s.correction?.feedback)
-              .slice(0, 2)
-              .map((submission) => (
-                <div key={`feedback-${submission.id}`} className="p-4 bg-blue-50 rounded-lg">
-                  <h3 className="font-medium text-gray-900">{submission.exercice.titre}</h3>
-                  <p className="mt-1 text-sm text-gray-600">{submission.correction.feedback}</p>
-                  <button 
-                    onClick={() => navigate(`/submission/${submission.id}`)}
-                    className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
-                  >
-                    Voir les détails →
-                  </button>
-                </div>
-              ))}
-          </div>
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-500">Aucune soumission récente</p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="mt-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+              >
+                Actualiser
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

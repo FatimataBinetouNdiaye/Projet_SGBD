@@ -1,17 +1,53 @@
-import React from 'react';
-import "./App.css";
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useContext } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, AuthContext } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Accueil from './components/Accueil';
 import Exercices from './components/Exercices';
 import Apropos from './components/Apropos';
-import ExerciceList from './components/ExerciceList'; // On garde ça pour afficher la liste
+import ExerciceList from './components/ExerciceList';
 import Footer from './components/footer';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import SubmissionForm from './components/SubmissionForm';
 import Dashboard from './components/Dashboard';
 import TeacherDashboard from './components/TeacherDashboard';
+import LoadingSpinner from './components/LoadingSpinner';
+import './App.css';
+
+// Composant de protection de route
+const ProtectedRoute = ({ children, requiredRole }) => {
+  const { user, isLoading } = useContext(AuthContext);
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (requiredRole && user.role !== requiredRole) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
+
+// Composant pour les routes publiques seulement
+const PublicOnlyRoute = ({ children }) => {
+  const { user, isLoading } = useContext(AuthContext);
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
+  if (user) {
+    return <Navigate to={user.role === 'PR' ? '/dashboard/prof' : '/tableau-de-bord'} replace />;
+  }
+
+  return children;
+};
 
 function Home() {
   return (
@@ -24,7 +60,6 @@ function Home() {
       </section>
       <section id="Apropos">
         <Apropos />
-         <TeacherDashboard />
       </section>
     </>
   );
@@ -32,19 +67,47 @@ function Home() {
 
 function App() {
   return (
-    <Router>
-      <Navbar />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/exercices" element={<ExerciceList />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/soumettre" element={<SubmissionForm />} />
-        <Route path="/tableau-de-bord" element={<Dashboard />} />
-        <Route path="*" element={<h1>Page non trouvée</h1>} />
-      </Routes>
-      <Footer />
-    </Router>
+    <AuthProvider>
+      <Router>
+        <Navbar />
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/exercices" element={<ExerciceList />} />
+          
+          {/* Routes publiques seulement (non authentifiées) */}
+          <Route path="/login" element={
+            <PublicOnlyRoute>
+              <Login />
+            </PublicOnlyRoute>
+          } />
+          <Route path="/signup" element={
+            <PublicOnlyRoute>
+              <Signup />
+            </PublicOnlyRoute>
+          } />
+          
+          {/* Routes protégées */}
+          <Route path="/soumettre" element={
+            <ProtectedRoute>
+              <SubmissionForm />
+            </ProtectedRoute>
+          } />
+          <Route path="/tableau-de-bord" element={
+            <ProtectedRoute requiredRole="ET">
+              <Dashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard/prof" element={
+            <ProtectedRoute requiredRole="PR">
+              <TeacherDashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="*" element={<h1>Page non trouvée</h1>} />
+        </Routes>
+        <Footer />
+      </Router>
+    </AuthProvider>
   );
 }
 

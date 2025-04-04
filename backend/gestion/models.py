@@ -18,7 +18,7 @@ class Utilisateur(AbstractUser):
     # Champs de base
     role = models.CharField(max_length=2, choices=ROLE_CHOICES, verbose_name="Rôle")
     email = models.EmailField(unique=True, verbose_name="Adresse email")
-    photo_profil = models.URLField(blank=True, null=True, verbose_name="Photo de profil")
+    photo_profil = models.ImageField(upload_to='profils/', null=True, blank=True)
     
     # Champs pour OAuth
     fournisseur_oauth = models.CharField(max_length=20, blank=True, null=True, 
@@ -51,6 +51,10 @@ class Utilisateur(AbstractUser):
     
     def __str__(self):
         return f"{self.get_full_name()} ({self.get_role_display()})"
+    
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = []
+
 
 class Classe(models.Model):
     """
@@ -89,15 +93,13 @@ class Exercice(models.Model):
     titre = models.CharField(max_length=200, verbose_name="Titre de l'exercice")
     description = models.TextField(verbose_name="Description détaillée")
     consignes = models.TextField(verbose_name="Consignes pour les étudiants")
-    
+   
     # Relations
     classe = models.ForeignKey(Classe, on_delete=models.CASCADE, 
                              related_name='exercices',
                              verbose_name="Classe concernée")
-    professeur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE, 
-                                 limit_choices_to={'role': Utilisateur.PROFESSEUR},
-                                 related_name='exercices_crees',
-                                 verbose_name="Professeur créateur")
+    professeur = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.CASCADE)
+
     
     # Fichiers et dates
     fichier_consigne = models.FileField(
@@ -111,7 +113,12 @@ class Exercice(models.Model):
     date_limite = models.DateTimeField(null=True, blank=True, verbose_name="Date limite de rendu")
     
     # Configuration IA
-    modele_correction = models.TextField(verbose_name="Modèle de correction pour l'IA")
+    modele_correction = models.FileField(
+        upload_to='modeles_correction/',
+        null=True,
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'docx'])]
+    )
     ponderation = models.JSONField(default=dict, verbose_name="Pondération des critères")
     
     # Statut

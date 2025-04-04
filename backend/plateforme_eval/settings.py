@@ -39,7 +39,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'gestion',
     'rest_framework',
-     'corsheaders',  # Ajout de CORS pour autoriser React
+    'corsheaders',  # Ajout de CORS pour autoriser React
+    'rest_framework_simplejwt',
+    'rest_framework.authtoken',  # <-- Ajoutez cette ligne
+
 ]
 
 MIDDLEWARE = [
@@ -146,10 +149,11 @@ REST_FRAMEWORK = {
         # 'rest_framework.permissions.IsAuthenticated',  # ← Commentez ou supprimez cette ligne
         'rest_framework.permissions.AllowAny',  # ← Autorise tout accès
     ],
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
-    ],
+     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+
+    ),
 }
 
 CORS_ALLOW_ALL_ORIGINS = True  # Autorise toutes les requêtes (pour le développement)
@@ -161,3 +165,9 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Europe/Paris'
+from datetime import timedelta  # Ajoutez cette ligne en haut du fichier
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+}

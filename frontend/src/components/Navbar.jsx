@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import icon from '/src/assets/icon.png';
 import { Link as ScrollLink } from 'react-scroll';
-import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import { FaBars, FaXmark } from 'react-icons/fa6';
-import { Database, Upload, LayoutDashboard } from 'lucide-react';
+import { Database, Upload, LayoutDashboard, LogOut, User, Settings } from 'lucide-react';
+import './Navbar.css'; // Fichier CSS séparé
+import { useContext } from 'react';
+import { AuthContext } from '../context/AuthContext'; // adapte selon ton chemin
+
 
 const Navbar = () => {
   const [isMenuOpen, setMenuOpen] = useState(false);
   const [isSticky, setIsSticky] = useState(false);
-  const location = useLocation(); // Permet de savoir sur quelle page on est
-
+  const { user, setUser, logout } = useContext(AuthContext);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  
   const toggleMenu = () => setMenuOpen(!isMenuOpen);
+  const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
 
   useEffect(() => {
     const handleScroll = () => setIsSticky(window.scrollY > 100);
@@ -18,90 +27,286 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    const fetchUser = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/utilisateur-connecte/', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        setUser(response.data);
+      } catch (error) {
+        console.error("Erreur de chargement utilisateur", error);
+        handleLogout();
+      }
+    };
+
+    fetchUser();
+  }, [location.pathname]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("role");
+    setUser(null);
+    setDropdownOpen(false);
+    setMenuOpen(false);
+    navigate("/login");
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownOpen && !event.target.closest('.dropdown-container')) {
+        setDropdownOpen(false);
+      }
+      if (isMenuOpen && !event.target.closest('.mobile-menu-container')) {
+        setMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [dropdownOpen, isMenuOpen]);
+
   return (
-    <header className={`w-full fixed top-0 left-0 right-0 bg-white md:bg-transparent`}>
-      <nav className={`py-4 lg:px-14 px-4 ${isSticky ? 'sticky top-0 left-0 right-0 border-b bg-white duration-300' : ''}`}>
-        <div className="flex justify-between items-center text-base gap-8">
-          <RouterLink to="/" className="text-2xl font-semibold flex items-center space-x-3">
-            <img src={icon} alt="non disponible" className="w-10 inline-block items-center" />
-            <span className="text-[#263238]">Platforme Intelligente</span>
+    <header className="navbar-header">
+      <nav className={`navbar-nav ${isSticky ? 'sticky-nav' : ''}`}>
+        <div className="nav-container">
+          <RouterLink to="/" className="logo-link">
+            <img src={icon} alt="icon" className="logo-img" />
+            <span className="logo-text">Platforme Intelligente</span>
           </RouterLink>
 
-          {/* Navigation */}
-          <ul className="md:flex space-x-12 hidden">
+          <ul className="desktop-menu">
             {location.pathname === "/" ? (
               <>
                 <li>
-                  <ScrollLink to="Accueil" spy={true} smooth={true} offset={-100} className="block text-base text-gray-900 hover:text-brandPrimary first:font-medium">
+                  <ScrollLink 
+                    to="Accueil" 
+                    spy smooth 
+                    offset={-100} 
+                    className="nav-link"
+                  >
                     Accueil
                   </ScrollLink>
                 </li>
                 <li>
-                  <ScrollLink to="Exercices" spy={true} smooth={true} offset={-100} className="block text-base text-gray-900 hover:text-brandPrimary first:font-medium">
-                     A propos
+                  <ScrollLink 
+                    to="Exercices" 
+                    spy smooth 
+                    offset={-100} 
+                    className="nav-link"
+                  >
+                    À propos
                   </ScrollLink>
                 </li>
               </>
             ) : (
               <li>
-                <RouterLink to="/" className="block text-base text-gray-900 hover:text-brandPrimary first:font-medium">
-                  Accueil
-                </RouterLink>
+                <RouterLink to="/" className="nav-link">Accueil</RouterLink>
               </li>
             )}
-            <li>
-              <RouterLink to="/exercices" className="block text-base text-gray-900 hover:text-brandPrimary first:font-medium">
-                <Database className="inline-block w-5 h-5 mr-2" /> Liste des Exercices
-              </RouterLink>
-            </li>
-            <li>
-              <RouterLink to="/soumettre" className="block text-base text-gray-900 hover:text-brandPrimary first:font-medium">
-                <Upload className="inline-block w-5 h-5 mr-2" /> Soumettre
-              </RouterLink>
-            </li>
-            <li>
-              <RouterLink to="/tableau-de-bord" className="block text-base text-gray-900 hover:text-brandPrimary first:font-medium">
-                <LayoutDashboard className="inline-block w-5 h-5 mr-2" /> Tableau de bord
-              </RouterLink>
-            </li>
+
+            {user && (
+              <>
+                <li>
+                  <RouterLink to="/soumettre" className="nav-link">
+                    <Upload className="link-icon" /> Soumettre
+                  </RouterLink>
+                </li>
+                <li>
+                  <RouterLink 
+                    to={user.role === 'PR' ? "/dashboard/prof" : "/tableau-de-bord"} 
+                    className="nav-link"
+                  >
+                    <LayoutDashboard className="link-icon" /> Dashboard
+                  </RouterLink>
+                </li>
+                <li>
+                  <RouterLink to="/exercices" className="nav-link">
+                    <Database className="link-icon" /> Exercices
+                  </RouterLink>
+                </li>
+              </>
+            )}
           </ul>
 
-          {/* Boutons Connexion & Inscription */}
-          <div className="space-x-12 hidden lg:flex items-center">
-            <RouterLink to="/login" className="text-brandPrimary hover:text-gray-900">Login</RouterLink>
-            <button className="bg-brandPrimary text-white py-2 px-4 transition-all duration-300 rounded hover:bg-neutralDGrey">
-              <RouterLink to="/signup"> Sign up </RouterLink>
-            </button>
+          <div className="auth-section">
+            {user ? (
+              <div className="dropdown-container">
+                <button 
+                  onClick={toggleDropdown}
+                  className="profile-button"
+                >
+                  <img
+                    src={user.photo_profil || "https://via.placeholder.com/40"}
+                    alt="Profil"
+                    className="profile-img"
+                  />
+                </button>
+                
+                {dropdownOpen && (
+                  <div className="dropdown-menu">
+                    <RouterLink 
+                      to="/profil"
+                      className="dropdown-item"
+                      onClick={() => setDropdownOpen(false)}
+                    >
+                      <User className="dropdown-icon" /> Mon Profil
+                    </RouterLink>
+                    <RouterLink 
+                      to="/parametres"
+                      className="dropdown-item"
+                      onClick={() => setDropdownOpen(false)}
+                    >
+                      <Settings className="dropdown-icon" /> Paramètres
+                    </RouterLink>
+                    <button onClick={logout}>Déconnexion</button>
+
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <RouterLink 
+                  to="/login" 
+                  className="login-link"
+                >
+                  Connexion
+                </RouterLink>
+                <RouterLink 
+                  to="/signup" 
+                  className="signup-link"
+                >
+                  Inscription
+                </RouterLink>
+              </>
+            )}
           </div>
 
-          {/* Bouton Menu Mobile */}
-          <div className="md:hidden">
-            <button onClick={toggleMenu} className="focus:outline-none focus:text-gray-500">
-              {isMenuOpen ? <FaXmark className="h-6 w-6 text-neutralDGrey" /> : <FaBars className="h-6 w-6 text-neutralDGrey" />}
+          <div className="mobile-menu-container">
+            <button 
+              onClick={toggleMenu}
+              className="menu-toggle"
+              aria-label="Toggle menu"
+            >
+              {isMenuOpen ? <FaXmark className="menu-icon" /> : <FaBars className="menu-icon" />}
             </button>
           </div>
         </div>
 
-        {/* Menu Mobile */}
         {isMenuOpen && (
-          <div className="space-y-4 px-4 mt-16 py-7 bg-brandPrimary fixed top-0 right-0 left-0">
-            {location.pathname === "/" ? (
-              <>
-                <ScrollLink to="Accueil" spy={true} smooth={true} offset={-100} className="block text-base text-white hover:text-brandPrimary first:font-medium" onClick={toggleMenu}>
-                  Accueil
-                </ScrollLink>
-                <ScrollLink to="Exercices" spy={true} smooth={true} offset={-100} className="block text-base text-white hover:text-brandPrimary first:font-medium" onClick={toggleMenu}>
-                   A propos
-                </ScrollLink>
-              </>
-            ) : (
-              <RouterLink to="/" className="block text-base text-white hover:text-brandPrimary first:font-medium" onClick={toggleMenu}>
-                Accueil
-              </RouterLink>
-            )}
-            <RouterLink to="/exercices" className="block text-base text-white hover:text-brandPrimary first:font-medium" onClick={toggleMenu}>
-              <Database className="inline-block w-5 h-5 mr-2" /> Liste des Exercices
-            </RouterLink>
+          <div className="mobile-menu">
+            <ul>
+              <li>
+                {location.pathname === "/" ? (
+                  <ScrollLink 
+                    to="Accueil" 
+                    spy smooth 
+                    offset={-100} 
+                    onClick={() => setMenuOpen(false)}
+                    className="mobile-link"
+                  >
+                    Accueil
+                  </ScrollLink>
+                ) : (
+                  <RouterLink 
+                    to="/" 
+                    onClick={() => setMenuOpen(false)}
+                    className="mobile-link"
+                  >
+                    Accueil
+                  </RouterLink>
+                )}
+              </li>
+
+              {location.pathname === "/" && (
+                <li>
+                  <ScrollLink 
+                    to="Exercices" 
+                    spy smooth 
+                    offset={-100} 
+                    onClick={() => setMenuOpen(false)}
+                    className="mobile-link"
+                  >
+                    À propos
+                  </ScrollLink>
+                </li>
+              )}
+
+              {user && (
+                <>
+                  <li>
+                    <RouterLink 
+                      to="/soumettre" 
+                      onClick={() => setMenuOpen(false)}
+                      className="mobile-link"
+                    >
+                      <Upload className="mobile-icon" /> Soumettre
+                    </RouterLink>
+                  </li>
+                  <li>
+                    <RouterLink 
+                      to={user.role === 'PR' ? "/dashboard/prof" : "/tableau-de-bord"} 
+                      onClick={() => setMenuOpen(false)}
+                      className="mobile-link"
+                    >
+                      <LayoutDashboard className="mobile-icon" /> Dashboard
+                    </RouterLink>
+                  </li>
+                  <li>
+                    <RouterLink 
+                      to="/exercices" 
+                      onClick={() => setMenuOpen(false)}
+                      className="mobile-link"
+                    >
+                      <Database className="mobile-icon" /> Exercices
+                    </RouterLink>
+                  </li>
+                  <li>
+                    <RouterLink 
+                      to="/profil" 
+                      onClick={() => setMenuOpen(false)}
+                      className="mobile-link"
+                    >
+                      <User className="mobile-icon" /> Mon Profil
+                    </RouterLink>
+                  </li>
+                </>
+              )}
+
+              <li className="mobile-auth">
+                {user ? (
+                  <button
+                    onClick={handleLogout}
+                    className="mobile-logout"
+                  >
+                    <LogOut className="mobile-icon" /> Déconnexion
+                  </button>
+                ) : (
+                  <div className="mobile-auth-buttons">
+                    <RouterLink 
+                      to="/login" 
+                      onClick={() => setMenuOpen(false)}
+                      className="mobile-login"
+                    >
+                      Connexion
+                    </RouterLink>
+                    <RouterLink 
+                      to="/signup" 
+                      onClick={() => setMenuOpen(false)}
+                      className="mobile-signup"
+                    >
+                      Inscription
+                    </RouterLink>
+                  </div>
+                )}
+              </li>
+            </ul>
           </div>
         )}
       </nav>

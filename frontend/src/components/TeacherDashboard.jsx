@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback  } from 'react';
 import axios from 'axios';
-import { BarChart, Users, Book, Plus, Eye, Edit, Trash, X, Upload } from 'lucide-react';
+import { Plus, Eye, Edit, Trash, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-function TeacherDashboard() {
-  // Couleurs du thème avec brandPrimary verte
+const TeacherDashboard = () => {
+  // Couleurs du thème
   const colors = {
     brandPrimary: '#4CAF4F',
     brandPrimaryLight: '#81C784',
@@ -18,340 +19,400 @@ function TeacherDashboard() {
     lightText: '#607D8B'
   };
 
+  // États
   const [exercises, setExercises] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [pdfFile, setPdfFile] = useState(null);
-  const [newExercise, setNewExercise] = useState({
+  const [modeleCorrectionFile, setModeleCorrectionFile] = useState(null);
+  const [error, setError] = useState('');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const navigate = useNavigate();
+
+  const initialExerciseState = {
     titre: '',
     description: '',
     difficulte: 'Moyenne',
     deadline: '',
-  });
-  const [stats, setStats] = useState({
-    totalStudents: 0,
-    totalExercises: 0,
-    averageScore: 0,
-  });
-  const [error, setError] = useState('');
+    consignes: '',
+    classe: '',
+    est_publie: false
+  };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const [newExercise, setNewExercise] = useState(initialExerciseState);
 
-  async function fetchData() {
+  // Chargement des données initiales
+  const hasNavigatedRef = useRef(false);
+
+  const loadData = useCallback(async () => {
     try {
-      const exercisesResponse = await axios.get('http://127.0.0.1:8000/api/exercices/');
-      const statsResponse = await axios.get('http://127.0.0.1:8000/api/stats/');
-
-      setExercises(exercisesResponse.data);
-      setStats(statsResponse.data);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setError('Erreur lors de la récupération des données');
-    }
-  }
-
-  async function handleCreateExercise(e) {
-    e.preventDefault();
-    setError('');
-
-    try {
-      const formData = new FormData();
-      formData.append('titre', newExercise.titre);
-      formData.append('description', newExercise.description);
-      formData.append('difficulte', newExercise.difficulte);
-      formData.append('deadline', newExercise.deadline);
-      if (pdfFile) {
-        formData.append('fichier_pdf', pdfFile);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        navigate('/login');
+        return;
       }
-
-      const response = await axios.post('http://127.0.0.1:8000/api/exercices/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      setShowModal(false);
-      setNewExercise({
-        titre: '',
-        description: '',
-        difficulte: 'Moyenne',
-        deadline: '',
-      });
-      setPdfFile(null);
-      fetchData();
+  
+      const headers = { Authorization: `Bearer ${token}` };
+      const [exercisesRes, classesRes] = await Promise.all([
+        axios.get('http://127.0.0.1:8000/api/exercices/', { headers }),
+        axios.get('http://127.0.0.1:8000/api/classes/', { headers })
+      ]);
+  
+      setExercises(exercisesRes.data);
+      setClasses(classesRes.data);
     } catch (error) {
-      console.error('Error creating exercise:', error);
-      setError('Erreur lors de la création de l\'exercice');
+      console.error("Erreur:", error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+      }
     }
-  }
+  }, [navigate]); // Seule dépendance nécessaire
+  
+  // 2. Utilisez cette fonction dans un useEffect simplifié
+  useEffect(() => {
+    if (!hasNavigatedRef.current) {
+      loadData();
+      hasNavigatedRef.current = true;
+    }
+  }, [loadData]);
 
+  // Gestion des fichiers
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file && file.type === 'application/pdf') {
       setPdfFile(file);
+      setError('');
     } else {
-      setError('Veuillez sélectionner un fichier PDF');
+      setError('Veuillez sélectionner un fichier PDF valide');
+      e.target.value = '';
+    }
+  };
+
+  const handleCorrectionFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setModeleCorrectionFile(file);
+      setError('');
+    }
+  };
+
+  // Création/Mise à jour d'un exercice
+  const handleCreateOrUpdateExercise = async (e) => {
+    e.preventDefault();
+    setError('');
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('titre', newExercise.titre);
+    formData.append('description', newExercise.description);
+    formData.append('deadline', newExercise.deadline);
+    formData.append('est_publie', newExercise.est_publie);
+    
+    const difficulteToPonderation = {
+      'Facile': { score: 20 },
+      'Moyenne': { score: 50 },
+      'Difficile': { score: 80 }
+    };
+    formData.append('ponderation', JSON.stringify(difficulteToPonderation[newExercise.difficulte]));
+    
+    if (pdfFile) formData.append('fichier_pdf', pdfFile);
+    if (newExercise.consignes) formData.append('consignes', newExercise.consignes);
+    if (newExercise.classe) formData.append('classe', newExercise.classe);
+    if (modeleCorrectionFile) formData.append('modele_correction', modeleCorrectionFile);
+
+    try {
+      const headers = {
+        'Content-Type': 'multipart/form-data',
+        Authorization: `Bearer ${token}`
+      };
+
+      if (isEditMode && editId) {
+        await axios.put(`http://127.0.0.1:8000/api/exercices/${editId}/`, formData, { headers });
+      } else {
+        await axios.post('http://127.0.0.1:8000/api/exercices/', formData, { headers });
+      }
+
+      resetForm();
+      // Recharger les données après modification
+      const [exercisesRes] = await Promise.all([
+        axios.get('http://127.0.0.1:8000/api/exercices/', { headers })
+      ]);
+      setExercises(exercisesRes.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Erreur lors de l\'envoi du formulaire');
+    }
+  };
+
+  const resetForm = () => {
+    setShowModal(false);
+    setNewExercise(initialExerciseState);
+    setPdfFile(null);
+    setModeleCorrectionFile(null);
+    setIsEditMode(false);
+    setEditId(null);
+  };
+
+  const openEditModal = (exercise) => {
+    setNewExercise({
+      titre: exercise.titre,
+      description: exercise.description,
+      difficulte: exercise.difficulte || 'Moyenne',
+      deadline: exercise.deadline,
+      consignes: exercise.consignes,
+      classe: exercise.classe,
+      est_publie: exercise.est_publie
+    });
+    setEditId(exercise.id);
+    setIsEditMode(true);
+    setShowModal(true);
+  };
+
+  const handleDeleteExercise = async (id) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cet exercice ?")) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      await axios.delete(`http://127.0.0.1:8000/api/exercices/${id}/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Mettre à jour la liste après suppression
+      const headers = { Authorization: `Bearer ${token}` };
+      const exercisesRes = await axios.get('http://127.0.0.1:8000/api/exercices/', { headers });
+      setExercises(exercisesRes.data);
+    } catch (err) {
+      console.error('Erreur lors de la suppression:', err);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
+    <div className="bg-gray-50 p-8 min-h-screen px-8 pt-24">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Tableau de bord professeur</h1>
-          <p className="mt-2 text-gray-600">Gérez vos exercices et suivez les progrès des étudiants</p>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center px-4 py-2 rounded-lg text-white"
+            style={{ backgroundColor: colors.brandPrimary }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nouvel exercice
+          </button>
         </div>
 
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Étudiants inscrits</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalStudents}</p>
-                <p className="text-xs text-green-500 mt-1">+5% ce mois</p>
-              </div>
-              <div className="p-3 rounded-full" style={{ backgroundColor: colors.lightBg }}>
-                <Users className="h-6 w-6" style={{ color: colors.brandPrimary }} />
-              </div>
-            </div>
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+            {error}
           </div>
+        )}
 
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Exercices créés</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalExercises}</p>
-                <p className="text-xs text-green-500 mt-1">+2 cette semaine</p>
-              </div>
-              <div className="p-3 rounded-full" style={{ backgroundColor: colors.lightBg }}>
-                <Book className="h-6 w-6" style={{ color: colors.brandPrimary }} />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Score moyen</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{stats.averageScore.toFixed(1)}%</p>
-                <p className="text-xs text-green-500 mt-1">+3% vs dernier mois</p>
-              </div>
-              <div className="p-3 rounded-full" style={{ backgroundColor: colors.lightBg }}>
-                <BarChart className="h-6 w-6" style={{ color: colors.brandPrimary }} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Exercises Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Exercices</h2>
-              <p className="text-sm text-gray-500 mt-1">Liste de tous vos exercices assignés</p>
-            </div>
-            <button 
-              onClick={() => setShowModal(true)}
-              className="flex items-center px-4 py-2 rounded-xl hover:shadow-md transition-all"
-              style={{ 
-                backgroundColor: colors.brandPrimary, 
-                color: 'white',
-                '&:hover': {
-                  backgroundColor: colors.brandPrimaryDark
-                }
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nouvel exercice
-            </button>
-          </div>
-
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Titre</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Difficulté</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date limite</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Professeur</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Titre</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Difficulté</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date limite</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {exercises.map((ex) => (
+                <tr key={ex.id}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ex.titre}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      ex.difficulte === 'Facile' ? 'bg-green-100 text-green-800' :
+                      ex.difficulte === 'Difficile' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {ex.difficulte}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(ex.deadline).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-2">
+                      <button className="text-blue-500 hover:text-blue-700">
+                        <Eye className="h-5 w-5" />
+                      </button>
+                      <button 
+                        onClick={() => openEditModal(ex)}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        <Edit className="h-5 w-5" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteExercise(ex.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {exercises.map((exercise) => (
-                  <tr key={exercise.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{exercise.titre}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                        exercise.difficulte === 'Facile' ? 'bg-green-100 text-green-800' :
-                        exercise.difficulte === 'Moyenne' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {exercise.difficulte}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                      {new Date(exercise.deadline).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                      {exercise.professeur.username}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex space-x-3">
-                        <button 
-                          className="p-1.5 rounded-lg hover:bg-gray-100"
-                          title="Voir"
-                        >
-                          <Eye className="h-4 w-4 text-gray-600" />
-                        </button>
-                        <button 
-                          className="p-1.5 rounded-lg hover:bg-gray-100"
-                          title="Modifier"
-                        >
-                          <Edit className="h-4 w-4 text-gray-600" />
-                        </button>
-                        <button 
-                          className="p-1.5 rounded-lg hover:bg-gray-100"
-                          title="Supprimer"
-                        >
-                          <Trash className="h-4 w-4 text-gray-600" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        {/* Create Exercise Modal */}
+        {/* Modal de création/édition */}
         {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-gray-900">Créer un nouvel exercice</h3>
-                <button 
-                  onClick={() => setShowModal(false)} 
-                  className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100"
-                >
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full">
+              <div className="flex justify-between items-center border-b p-4">
+                <h3 className="text-xl font-bold">
+                  {isEditMode ? 'Modifier un exercice' : 'Créer un nouvel exercice'}
+                </h3>
+                <button onClick={resetForm} className="text-gray-500 hover:text-gray-700">
                   <X className="h-6 w-6" />
                 </button>
               </div>
-              
-              <form onSubmit={handleCreateExercise} className="space-y-4">
+              <form onSubmit={handleCreateOrUpdateExercise} className="p-6 space-y-4">
                 <div>
-                  <label htmlFor="titre" className="block text-sm font-medium text-gray-700 mb-1">
-                    Titre
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Titre*</label>
                   <input
                     type="text"
-                    id="titre"
                     value={newExercise.titre}
                     onChange={(e) => setNewExercise({...newExercise, titre: e.target.value})}
-                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-offset-1 focus:ring-green-500 focus:border-green-500"
+                    className="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                     required
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description*</label>
                   <textarea
-                    id="description"
                     value={newExercise.description}
                     onChange={(e) => setNewExercise({...newExercise, description: e.target.value})}
+                    className="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                     rows={4}
-                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-offset-1 focus:ring-green-500 focus:border-green-500"
                     required
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Consignes*</label>
+                  <textarea
+                    value={newExercise.consignes}
+                    onChange={(e) => setNewExercise({...newExercise, consignes: e.target.value})}
+                    className="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                    rows={2}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="difficulte" className="block text-sm font-medium text-gray-700 mb-1">
-                      Difficulté
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Difficulté*</label>
                     <select
-                      id="difficulte"
                       value={newExercise.difficulte}
                       onChange={(e) => setNewExercise({...newExercise, difficulte: e.target.value})}
-                      className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-offset-1 focus:ring-green-500 focus:border-green-500"
+                      className="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                      required
                     >
-                      <option>Facile</option>
-                      <option>Moyenne</option>
-                      <option>Difficile</option>
+                      <option value="Facile">Facile</option>
+                      <option value="Moyenne">Moyenne</option>
+                      <option value="Difficile">Difficile</option>
                     </select>
                   </div>
 
                   <div>
-                    <label htmlFor="deadline" className="block text-sm font-medium text-gray-700 mb-1">
-                      Date limite
-                    </label>
-                    <input
-                      type="datetime-local"
-                      id="deadline"
-                      value={newExercise.deadline}
-                      onChange={(e) => setNewExercise({...newExercise, deadline: e.target.value})}
-                      className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-offset-1 focus:ring-green-500 focus:border-green-500"
-                      required
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Classe</label>
+                    <select
+                      value={newExercise.classe}
+                      onChange={(e) => setNewExercise({...newExercise, classe: e.target.value})}
+                      className="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="">Sélectionnez une classe</option>
+                      {classes.map(classe => (
+                        <option key={classe.id} value={classe.id}>{classe.nom}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="pdf" className="block text-sm font-medium text-gray-700 mb-1">
-                    Fichier PDF
-                  </label>
-                  <div className="mt-1">
-                    <label className="w-full flex flex-col items-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all">
-                      <Upload className="h-8 w-8 mb-2" style={{ color: colors.brandPrimary }} />
-                      <p className="text-sm text-center">
-                        {pdfFile ? (
-                          <span className="font-medium">{pdfFile.name}</span>
-                        ) : (
-                          <>
-                            <span className="font-medium" style={{ color: colors.brandPrimary }}>Cliquez pour télécharger</span>
-                            <span className="block text-xs text-gray-500 mt-1">ou glissez-déposez un fichier PDF</span>
-                          </>
-                        )}
-                      </p>
-                      <input
-                        type="file"
-                        id="pdf"
-                        accept=".pdf"
-                        onChange={handleFileChange}
-                        className="sr-only"
-                      />
-                    </label>
-                  </div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date limite*</label>
+                  <input
+                    type="datetime-local"
+                    value={newExercise.deadline}
+                    onChange={(e) => setNewExercise({...newExercise, deadline: e.target.value})}
+                    className="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                    required
+                  />
                 </div>
 
-                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fichier PDF</label>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Modèle de correction
+                    {modeleCorrectionFile && (
+                      <span className="ml-2 text-green-600">(Fichier sélectionné)</span>
+                    )}
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={handleCorrectionFileChange}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="publish"
+                    checked={newExercise.est_publie}
+                    onChange={(e) => setNewExercise({...newExercise, est_publie: e.target.checked})}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="publish" className="ml-2 block text-sm text-gray-900">
+                    Publier immédiatement
+                  </label>
+                </div>
+
+                {error && (
+                  <div className="p-4 text-sm text-red-700 bg-red-100 rounded-lg">
+                    {error}
+                  </div>
+                )}
 
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                    onClick={resetForm}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
                   >
                     Annuler
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-lg hover:shadow-md transition-all"
-                    style={{ 
-                      backgroundColor: colors.brandPrimary, 
-                      color: 'white',
-                      '&:hover': {
-                        backgroundColor: colors.brandPrimaryDark
-                      }
-                    }}
+                    className="px-4 py-2 rounded-lg text-white"
+                    style={{ backgroundColor: colors.brandPrimary }}
                   >
-                    Créer l'exercice
+                    {isEditMode ? 'Mettre à jour' : 'Créer'}
                   </button>
                 </div>
               </form>
@@ -361,6 +422,6 @@ function TeacherDashboard() {
       </div>
     </div>
   );
-}
+};
 
 export default TeacherDashboard;
