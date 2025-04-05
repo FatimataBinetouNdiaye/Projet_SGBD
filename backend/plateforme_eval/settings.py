@@ -16,8 +16,6 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
@@ -41,7 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'gestion',
     'rest_framework',
-    'corsheaders',  # Ajout de CORS pour autoriser React
+     'corsheaders',  # Ajout de CORS pour autoriser React
 ]
 
 MIDDLEWARE = [
@@ -77,7 +75,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'plateforme_eval.wsgi.application'
 
 
-# Database
+# Databasepasser123@
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
@@ -139,14 +137,28 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 AUTH_USER_MODEL = 'gestion.User'
 
-
-
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',  # Assure une réponse JSON
         'rest_framework.renderers.BrowsableAPIRenderer',  # Permet l'affichage HTML
     ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        # 'rest_framework.permissions.IsAuthenticated',  # ← Commentez ou supprimez cette ligne
+        'rest_framework.permissions.AllowAny',  # ← Autorise tout accès
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+    ],
 }
+
 
 CORS_ALLOW_ALL_ORIGINS = True  # Autorise toutes les requêtes (pour le développement)
 
+# Paramètres Celery
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Ou l'URL de votre broker
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Europe/Paris'

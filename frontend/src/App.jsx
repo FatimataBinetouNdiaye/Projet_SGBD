@@ -11,6 +11,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import SubmissionForm from './components/SubmissionForm';
 import Dashboard from './components/Dashboard';
+import TeacherDashboard from './components/TeacherDashboard';
 
 function Home() {
   return (
@@ -23,6 +24,7 @@ function Home() {
       </section>
       <section id="Apropos">
         <Apropos />
+         <TeacherDashboard />
       </section>
     </>
   );
