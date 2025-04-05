@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Connexion</title>
+</head>
+<body>
+    <h2>Connexion</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <p style="color:red;">{{ message }}</p>
+        {% endfor %}
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        <label>Email :</label>
+        <input type="email" name="email" required><br>
+
+        <label>Mot de passe :</label>
+        <input type="password" name="password" required><br>
+
+        <label>Rôle :</label>
+        <select name="role" required>
+            <option value="etudiant">Étudiant</option>
+            <option value="professeur">Professeur</option>
+        </select><br>
+
+        <button type="submit">Se connecter</button>
+    </form>
+</body>
+</html>
