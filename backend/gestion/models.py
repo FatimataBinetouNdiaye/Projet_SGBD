@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
 
+
 class Utilisateur(AbstractUser):
     """
     Modèle personnalisé pour gérer tous les utilisateurs de la plateforme
@@ -31,29 +32,27 @@ class Utilisateur(AbstractUser):
         blank=True,
         related_name="utilisateur_groups",
         related_query_name="utilisateur",
+
     )
-    user_permissions = models.ManyToManyField(
-        'auth.Permission',
-        verbose_name='user permissions',
-        blank=True,
-        related_name="utilisateur_permissions",
-        related_query_name="utilisateur",
-    )
-    
-    # Métadonnées
-    date_inscription = models.DateTimeField(auto_now_add=True, verbose_name="Date d'inscription")
-    derniere_connexion = models.DateTimeField(null=True, blank=True, verbose_name="Dernière connexion")
-    
-    class Meta:
-        verbose_name = "Utilisateur"
-        verbose_name_plural = "Utilisateurs"
-        ordering = ['last_name', 'first_name']
-    
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='etudiant')  # 👈 ici
+    username = None
+
+    first_name = models.CharField(max_length=30)
+    last_name = models.CharField(max_length=30)
+    email = models.EmailField(unique=True)
+    matricule = models.CharField(max_length=20, unique=True)
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['first_name', 'last_name', 'matricule']
+
     def __str__(self):
+
         return f"{self.get_full_name()} ({self.get_role_display()})"
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
+
+       
 
 
 class Classe(models.Model):
@@ -98,9 +97,10 @@ class Exercice(models.Model):
     classe = models.ForeignKey(Classe, on_delete=models.CASCADE, 
                              related_name='exercices',
                              verbose_name="Classe concernée")
+
     professeur = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.CASCADE)
 
-    
+
     # Fichiers et dates
     fichier_consigne = models.FileField(
         upload_to='exercices/consignes/',
@@ -380,3 +380,4 @@ class ParametresPlateforme(models.Model):
         # S'assurer qu'il n'y a qu'une seule instance
         self.__class__.objects.exclude(id=self.id).delete()
         super().save(*args, **kwargs)
+

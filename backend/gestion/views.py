@@ -1,3 +1,4 @@
+
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,6 +15,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
     queryset = Utilisateur.objects.all()
     serializer_class = UtilisateurSerializer
 from django.contrib.auth.models import AnonymousUser
+
 
 class ClasseViewSet(viewsets.ModelViewSet):
     queryset = Classe.objects.all()
@@ -163,6 +165,7 @@ class UploadSoumissionView(APIView):
             taille_fichier=fichier_pdf.size
         )
         
+
         return Response(
             {"status": "success", "submission_id": soumission.id},
             status=status.HTTP_201_CREATED
@@ -275,3 +278,4 @@ from .serializers import UtilisateurSerializer
 def utilisateur_connecte(request):
     serializer = UtilisateurSerializer(request.user)
     return Response(serializer.data)
+

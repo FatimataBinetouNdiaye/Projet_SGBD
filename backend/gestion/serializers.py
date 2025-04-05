@@ -1,4 +1,5 @@
 from rest_framework import serializers
+
 from django.contrib.auth.hashers import make_password
 from .models import Utilisateur, Classe, Exercice, Soumission, Correction, PerformanceEtudiant
 from django.utils import timezone
@@ -28,6 +29,7 @@ class UtilisateurSerializer(serializers.ModelSerializer):
         if 'password' in validated_data:
             validated_data['password'] = make_password(validated_data.pop('password'))
         return super().update(instance, validated_data)
+
 
 
 class ClasseSerializer(serializers.ModelSerializer):
@@ -122,6 +124,7 @@ class ExerciceSerializer(serializers.ModelSerializer):
         return []
 
     
+
 
 
 class CorrectionSerializer(serializers.ModelSerializer):

@@ -78,15 +78,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'plateforme_eval.wsgi.application'
 
 
-# Database
+# Databasepasser123@
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'projet_sgbd',
+        'NAME': 'projet_bd',
         'USER': 'root',  
-        'PASSWORD': 'oracle', 
+        'PASSWORD': 'Mously1@', 
         'HOST': 'localhost',
         'PORT': '3306',
     }
@@ -138,7 +138,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-AUTH_USER_MODEL = 'gestion.Utilisateur'
+AUTH_USER_MODEL = 'gestion.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
@@ -155,6 +155,7 @@ REST_FRAMEWORK = {
 
     ),
 }
+
 
 CORS_ALLOW_ALL_ORIGINS = True  # Autorise toutes les requêtes (pour le développement)
 
