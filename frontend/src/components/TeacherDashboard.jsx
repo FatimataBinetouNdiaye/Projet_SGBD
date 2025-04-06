@@ -54,10 +54,10 @@ const TeacherDashboard = () => {
       }
   
       const headers = { Authorization: `Bearer ${token}` };
-      const [exercisesRes, classesRes] = await Promise.all([
-        axios.get('http://127.0.0.1:8000/api/exercices/', { headers }),
-        axios.get('http://127.0.0.1:8000/api/classes/', { headers })
-      ]);
+      
+      // Récupérer les exercices du professeur connecté
+      const exercisesRes = await axios.get('http://127.0.0.1:8000/api/exercices/', { headers });
+      const classesRes = await axios.get('http://127.0.0.1:8000/api/classes/', { headers });
   
       setExercises(exercisesRes.data);
       setClasses(classesRes.data);
@@ -68,8 +68,7 @@ const TeacherDashboard = () => {
         navigate('/login');
       }
     }
-  }, [navigate]); // Seule dépendance nécessaire
-  
+  }, [navigate]);
   // 2. Utilisez cette fonction dans un useEffect simplifié
   useEffect(() => {
     if (!hasNavigatedRef.current) {
@@ -98,7 +97,6 @@ const TeacherDashboard = () => {
     }
   };
 
-  // Création/Mise à jour d'un exercice
   const handleCreateOrUpdateExercise = async (e) => {
     e.preventDefault();
     setError('');
@@ -107,12 +105,14 @@ const TeacherDashboard = () => {
       navigate('/login');
       return;
     }
-
+  
     const formData = new FormData();
     formData.append('titre', newExercise.titre);
     formData.append('description', newExercise.description);
     formData.append('deadline', newExercise.deadline);
     formData.append('est_publie', newExercise.est_publie);
+    formData.append('consignes', newExercise.consignes);
+    if (newExercise.classe) formData.append('classe', newExercise.classe);
     
     const difficulteToPonderation = {
       'Facile': { score: 20 },
@@ -121,28 +121,24 @@ const TeacherDashboard = () => {
     };
     formData.append('ponderation', JSON.stringify(difficulteToPonderation[newExercise.difficulte]));
     
-    if (pdfFile) formData.append('fichier_pdf', pdfFile);
-    if (newExercise.consignes) formData.append('consignes', newExercise.consignes);
-    if (newExercise.classe) formData.append('classe', newExercise.classe);
+    if (pdfFile) formData.append('fichier_consigne', pdfFile);
     if (modeleCorrectionFile) formData.append('modele_correction', modeleCorrectionFile);
-
+  
     try {
       const headers = {
         'Content-Type': 'multipart/form-data',
         Authorization: `Bearer ${token}`
       };
-
+  
       if (isEditMode && editId) {
         await axios.put(`http://127.0.0.1:8000/api/exercices/${editId}/`, formData, { headers });
       } else {
         await axios.post('http://127.0.0.1:8000/api/exercices/', formData, { headers });
       }
-
+  
       resetForm();
-      // Recharger les données après modification
-      const [exercisesRes] = await Promise.all([
-        axios.get('http://127.0.0.1:8000/api/exercices/', { headers })
-      ]);
+      // Recharger les données
+      const exercisesRes = await axios.get('http://127.0.0.1:8000/api/exercices/', { headers });
       setExercises(exercisesRes.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur lors de l\'envoi du formulaire');

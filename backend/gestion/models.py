@@ -9,6 +9,7 @@ class Utilisateur(AbstractUser):
     Modèle personnalisé pour gérer tous les utilisateurs de la plateforme
     avec système de rôles (Étudiant/Professeur) et authentification OAuth
     """
+    
     ETUDIANT = 'ET'
     PROFESSEUR = 'PR'
     ROLE_CHOICES = [
@@ -17,42 +18,30 @@ class Utilisateur(AbstractUser):
     ]
     
     # Champs de base
-    role = models.CharField(max_length=2, choices=ROLE_CHOICES, verbose_name="Rôle")
+    role = models.CharField(max_length=2, choices=ROLE_CHOICES, verbose_name="Rôle", default=ETUDIANT)
     email = models.EmailField(unique=True, verbose_name="Adresse email")
     photo_profil = models.ImageField(upload_to='profils/', null=True, blank=True)
-    
+    date_inscription = models.DateTimeField(auto_now_add=False, default=timezone.now)
+
+
     # Champs pour OAuth
     fournisseur_oauth = models.CharField(max_length=20, blank=True, null=True, 
-                                       verbose_name="Fournisseur OAuth")
+                                         verbose_name="Fournisseur OAuth")
     identifiant_oauth = models.CharField(max_length=100, blank=True, null=True, 
-                                       verbose_name="ID OAuth")
-    groups = models.ManyToManyField(
-        'auth.Group',
-        verbose_name='groups',
-        blank=True,
-        related_name="utilisateur_groups",
-        related_query_name="utilisateur",
+                                         verbose_name="ID OAuth")
 
-    )
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='etudiant')  # 👈 ici
-    username = None
-
+    # Champs de l'utilisateur
     first_name = models.CharField(max_length=30)
     last_name = models.CharField(max_length=30)
-    email = models.EmailField(unique=True)
     matricule = models.CharField(max_length=20, unique=True)
 
+    # Configuration du modèle
+    username = None  # Nous utilisons l'email comme identifiant principal
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['first_name', 'last_name', 'matricule']
+    REQUIRED_FIELDS = ['first_name', 'last_name', 'matricule']  # Le matricule est obligatoire
 
     def __str__(self):
-
         return f"{self.get_full_name()} ({self.get_role_display()})"
-    
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
-
-       
 
 
 class Classe(models.Model):
@@ -99,6 +88,7 @@ class Exercice(models.Model):
                              verbose_name="Classe concernée")
 
     professeur = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.CASCADE)
+    date_inscription = models.DateTimeField(null=True, blank=True)
 
 
     # Fichiers et dates

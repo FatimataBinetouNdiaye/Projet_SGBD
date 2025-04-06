@@ -78,7 +78,7 @@ const Navbar = () => {
         <div className="nav-container">
           <RouterLink to="/" className="logo-link">
             <img src={icon} alt="icon" className="logo-img" />
-            <span className="logo-text">Platforme Intelligente</span>
+            <span className="logo-text">Plateforme Intelligente</span>
           </RouterLink>
 
           <ul className="desktop-menu">

@@ -17,7 +17,7 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Section 1 : Logo et description */}
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold">Platforme Intelligente</h2>
+            <h2 className="text-2xl font-bold">Plateforme Intelligente</h2>
             <p className="text-gray-400">
               Une solution innovante pour l'évaluation et l'amélioration des performances académiques.
             </p>

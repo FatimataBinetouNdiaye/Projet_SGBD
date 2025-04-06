@@ -1,4 +1,3 @@
-
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -16,7 +15,6 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
     serializer_class = UtilisateurSerializer
 from django.contrib.auth.models import AnonymousUser
 
-
 class ClasseViewSet(viewsets.ModelViewSet):
     queryset = Classe.objects.all()
     serializer_class = ClasseSerializer
@@ -29,32 +27,23 @@ from rest_framework.permissions import IsAuthenticated
 class ExerciceViewSet(viewsets.ModelViewSet):
     queryset = Exercice.objects.all()
     serializer_class = ExerciceSerializer
-    permission_classes = [IsAuthenticated]  # ✅ Important
-    def perform_create(self, serializer):
-        serializer.save(professeur=self.request.user)
+    permission_classes = [IsAuthenticated]
 
+    def perform_create(self, serializer):
+        # Associe automatiquement le professeur connecté
+        serializer.save(professeur=self.request.user)
 
     def get_queryset(self):
         user = self.request.user
-
+        
         if user.role == Utilisateur.PROFESSEUR:
-        # Un professeur voit ses propres exercices, publiés ou non
+            # Professeur voit seulement ses exercices
             queryset = Exercice.objects.filter(professeur=user)
         else:
-        # Étudiants : ne voient que les exos publiés
+            # Étudiants voient seulement les exercices publiés
             queryset = Exercice.objects.filter(est_publie=True)
-
-    # Préchargement des relations
-        queryset = queryset.select_related('professeur', 'classe')
-
-        return queryset.order_by('-date_creation')
-
-
-    def get_serializer_context(self):
-        """Passe le contexte (request) au sérialiseur"""
-        context = super().get_serializer_context()
-        context['request'] = self.request
-        return context
+        
+        return queryset.select_related('professeur', 'classe').order_by('-date_creation')
 
 
     @action(detail=True, methods=['get'])
@@ -165,7 +154,6 @@ class UploadSoumissionView(APIView):
             taille_fichier=fichier_pdf.size
         )
         
-
         return Response(
             {"status": "success", "submission_id": soumission.id},
             status=status.HTTP_201_CREATED
@@ -279,3 +267,55 @@ def utilisateur_connecte(request):
     serializer = UtilisateurSerializer(request.user)
     return Response(serializer.data)
 
+from rest_framework import status
+from .google_auth import google_validate_id_token, register_or_login_social_user
+
+class GoogleSocialAuthView(APIView):
+    def post(self, request):
+        token = request.data.get('token')
+        role = request.data.get('role', 'ET')
+        
+        if not token:
+            return Response(
+                {'error': 'Token manquant'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Valider le token Google
+            user_data = google_validate_id_token(token)
+            
+            # Enregistrer ou connecter l'utilisateur
+            auth_data = register_or_login_social_user(
+                email=user_data['email'],
+                nom=user_data.get('family_name', ''),
+                prenom=user_data.get('given_name', ''),
+                provider='google',
+                photo_url=user_data.get('picture'),
+                role=role
+            )
+            
+            return Response(auth_data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny  # Pour permettre l'accès à tous les utilisateurs
+from rest_framework.response import Response
+from rest_framework import status
+from .serializers import UtilisateurSerializer
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # Permet à tout le monde d'accéder à cette vue
+def signup(request):
+    if request.method == 'POST':
+        serializer = UtilisateurSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()  # Créer un nouvel utilisateur
+            return Response({"message": "Utilisateur créé avec succès"}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

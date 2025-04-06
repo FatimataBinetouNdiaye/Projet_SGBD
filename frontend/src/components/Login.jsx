@@ -1,10 +1,22 @@
 import React, { useState } from 'react';
-
 import axios from 'axios';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
+import { jwtDecode } from "jwt-decode";
 
 function Login() {
+  // Couleurs du thème
+  const colors = {
+    brandPrimary: '#4CAF4F', // Vert - Couleur principale
+    brandPrimaryLight: '#81C784', // Vert clair
+    brandPrimaryLighter: '#C8E6C9', // Vert très clair
+    brandPrimaryDark: '#388E3C', // Vert foncé
+    lightBg: '#F5F5F5', // Fond clair
+    darkText: '#263238', // Texte foncé
+    lightText: '#607D8B' // Texte clair
+  };
+
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
@@ -26,7 +38,6 @@ function Login() {
       [name]: value
     });
     
-    // Validation en temps réel
     if (name === 'email') {
       setFormErrors({
         ...formErrors,
@@ -49,27 +60,13 @@ function Login() {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-    
-    setIsLoading(true);
-    setError('');
-
+  const handleLoginSuccess = async (accessToken) => {
     try {
-      const response = await axios.post("http://127.0.0.1:8000/api/token/", {
-        email: formData.email,
-        password: formData.password
-      });
-
-      // Stockage des tokens et informations utilisateur
-      localStorage.setItem("token", response.data.access);
-      localStorage.setItem("refresh_token", response.data.refresh);
+      localStorage.setItem("token", accessToken);
       
-      // Récupération des infos utilisateur
       const userResponse = await axios.get("http://127.0.0.1:8000/api/utilisateur-connecte/", {
         headers: {
-          Authorization: `Bearer ${response.data.access}`
+          Authorization: `Bearer ${accessToken}`
         }
       });
 
@@ -84,26 +81,38 @@ function Login() {
 
       localStorage.setItem("user", JSON.stringify(userData));
 
-      // Redirection basée sur le rôle
       const redirectPath = userData.role === 'PR' ? "/dashboard/prof" : "/tableau-de-bord";
       navigate(redirectPath);
+    } catch (error) {
+      console.error("Erreur après connexion:", error);
+      setError("Erreur lors de la récupération des données utilisateur");
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await axios.post("http://127.0.0.1:8000/api/token/", {
+        email: formData.email,
+        password: formData.password
+      });
+
+      await handleLoginSuccess(response.data.access);
 
     } catch (error) {
       console.error("Erreur de connexion:", error);
       
       if (error.response) {
         switch (error.response.status) {
-          case 401:
-            setError("Identifiants incorrects");
-            break;
-          case 400:
-            setError("Données de connexion invalides");
-            break;
-          case 500:
-            setError("Erreur serveur - Veuillez réessayer plus tard");
-            break;
-          default:
-            setError("Erreur de connexion");
+          case 401: setError("Identifiants incorrects"); break;
+          case 400: setError("Données de connexion invalides"); break;
+          case 500: setError("Erreur serveur - Veuillez réessayer plus tard"); break;
+          default: setError("Erreur de connexion");
         }
       } else if (error.request) {
         setError("Pas de réponse du serveur");
@@ -115,21 +124,49 @@ function Login() {
     }
   };
 
+  const handleGoogleLoginSuccess = async (credentialResponse) => {
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      const decoded = jwtDecode(credentialResponse.credential);
+
+      const response = await axios.post("http://127.0.0.1:8000/api/google-auth/", {
+        token: credentialResponse.credential,
+        role: formData.role
+      });
+
+      await handleLoginSuccess(response.data.access);
+      
+    } catch (error) {
+      console.error("Erreur de connexion Google:", error);
+      setError("Erreur lors de la connexion avec Google");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLoginFailure = () => {
+    setError("Échec de la connexion avec Google");
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-md">
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: colors.lightBg }}>
+      <div className="max-w-md w-full space-y-8 p-10 rounded-xl shadow-lg" style={{ backgroundColor: 'white' }}>
         <div className="text-center">
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Connexion</h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <h2 className="mt-6 text-3xl font-extrabold" style={{ color: colors.darkText }}>
+            Connexion
+          </h2>
+          <p className="mt-2 text-sm" style={{ color: colors.lightText }}>
             Accédez à votre espace {formData.role === 'ET' ? 'étudiant' : 'professeur'}
           </p>
         </div>
 
         {error && (
-          <div className="rounded-md bg-red-50 p-4">
+          <div className="rounded-md p-4" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>
             <div className="flex">
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                <h3 className="text-sm font-medium">{error}</h3>
               </div>
             </div>
           </div>
@@ -138,7 +175,7 @@ function Login() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="email" className="block text-sm font-medium" style={{ color: colors.darkText }}>
                 Adresse email
               </label>
               <input
@@ -149,16 +186,23 @@ function Login() {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className={`appearance-none relative block w-full px-3 py-2 border ${formErrors.email ? 'border-red-300' : 'border-gray-300'} rounded-md placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
+                className={`appearance-none relative block w-full px-3 py-3 border ${formErrors.email ? 'border-red-300' : 'border-gray-300'} rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm`}
+                style={{
+                  borderColor: formErrors.email ? '#FCA5A5' : colors.brandPrimaryLighter,
+                  focusBorderColor: colors.brandPrimary,
+                  focusRingColor: colors.brandPrimaryLight
+                }}
                 placeholder="email@exemple.com"
               />
               {formErrors.email && (
-                <p className="mt-1 text-sm text-red-600">{formErrors.email}</p>
+                <p className="mt-1 text-sm" style={{ color: '#DC2626' }}>
+                  {formErrors.email}
+                </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="password" className="block text-sm font-medium" style={{ color: colors.darkText }}>
                 Mot de passe
               </label>
               <div className="relative">
@@ -170,7 +214,12 @@ function Login() {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className={`appearance-none relative block w-full px-3 py-2 border ${formErrors.password ? 'border-red-300' : 'border-gray-300'} rounded-md placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
+                  className={`appearance-none relative block w-full px-3 py-3 border ${formErrors.password ? 'border-red-300' : 'border-gray-300'} rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm`}
+                  style={{
+                    borderColor: formErrors.password ? '#FCA5A5' : colors.brandPrimaryLighter,
+                    focusBorderColor: colors.brandPrimary,
+                    focusRingColor: colors.brandPrimaryLight
+                  }}
                   placeholder="••••••••"
                 />
                 <button
@@ -179,19 +228,21 @@ function Login() {
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400" />
+                    <EyeOff className="h-5 w-5" style={{ color: colors.lightText }} />
                   ) : (
-                    <Eye className="h-5 w-5 text-gray-400" />
+                    <Eye className="h-5 w-5" style={{ color: colors.lightText }} />
                   )}
                 </button>
               </div>
               {formErrors.password && (
-                <p className="mt-1 text-sm text-red-600">{formErrors.password}</p>
+                <p className="mt-1 text-sm" style={{ color: '#DC2626' }}>
+                  {formErrors.password}
+                </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="role" className="block text-sm font-medium" style={{ color: colors.darkText }}>
                 Type de compte
               </label>
               <select
@@ -199,7 +250,12 @@ function Login() {
                 name="role"
                 value={formData.role}
                 onChange={handleChange}
-                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                className="mt-1 block w-full pl-3 pr-10 py-3 text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm"
+                style={{
+                  borderColor: colors.brandPrimaryLighter,
+                  focusBorderColor: colors.brandPrimary,
+                  focusRingColor: colors.brandPrimaryLight
+                }}
               >
                 <option value="ET">Étudiant</option>
                 <option value="PR">Professeur</option>
@@ -213,9 +269,14 @@ function Login() {
                 id="remember-me"
                 name="remember-me"
                 type="checkbox"
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="h-4 w-4 rounded"
+                style={{
+                  color: colors.brandPrimary,
+                  borderColor: colors.brandPrimaryLight,
+                  focusRingColor: colors.brandPrimary
+                }}
               />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+              <label htmlFor="remember-me" className="ml-2 block text-sm" style={{ color: colors.darkText }}>
                 Se souvenir de moi
               </label>
             </div>
@@ -223,7 +284,8 @@ function Login() {
             <div className="text-sm">
               <RouterLink 
                 to="/mot-de-passe-oublie" 
-                className="font-medium text-blue-600 hover:text-blue-500"
+                className="font-medium hover:underline"
+                style={{ color: colors.brandPrimary }}
               >
                 Mot de passe oublié ?
               </RouterLink>
@@ -234,17 +296,23 @@ function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              className="group relative w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200"
+              style={{
+                backgroundColor: colors.brandPrimary,
+                hoverBackgroundColor: colors.brandPrimaryDark,
+                focusRingColor: colors.brandPrimaryLight,
+                disabledOpacity: '0.7'
+              }}
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                  <Loader2 className="animate-spin mr-2 h-5 w-5" />
                   Connexion en cours...
                 </>
               ) : (
                 <>
                   <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                    <svg className="h-5 w-5 text-blue-500 group-hover:text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <svg className="h-5 w-5" style={{ color: colors.brandPrimaryLighter }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                     </svg>
                   </span>
@@ -255,11 +323,35 @@ function Login() {
           </div>
         </form>
 
-        <div className="text-center text-sm text-gray-600">
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t" style={{ borderColor: colors.brandPrimaryLighter }}></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white" style={{ color: colors.lightText }}>
+              Ou continuer avec
+            </span>
+          </div>
+        </div>
+
+        <div className="flex justify-center">
+          <GoogleLogin
+            onSuccess={handleGoogleLoginSuccess}
+            onError={handleGoogleLoginFailure}
+            shape="pill"
+            size="large"
+            text="continue_with"
+            locale="fr"
+            theme="filled_blue" // Vous pouvez personnaliser ceci si nécessaire
+          />
+        </div>
+
+        <div className="text-center text-sm" style={{ color: colors.lightText }}>
           Pas encore de compte ?{' '}
           <RouterLink 
             to="/signup" 
-            className="font-medium text-blue-600 hover:text-blue-500"
+            className="font-medium hover:underline"
+            style={{ color: colors.brandPrimary }}
           >
             S'inscrire
           </RouterLink>

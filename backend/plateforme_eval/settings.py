@@ -1,3 +1,4 @@
+
 """
 Django settings for plateforme_eval project.
 
@@ -78,15 +79,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'plateforme_eval.wsgi.application'
 
 
-# Databasepasser123@
+# Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'projet_bd',
+        'NAME': 'projet_sgbd',
         'USER': 'root',  
-        'PASSWORD': 'Mously1@', 
+        'PASSWORD': 'oracle', 
         'HOST': 'localhost',
         'PORT': '3306',
     }
@@ -138,7 +139,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-AUTH_USER_MODEL = 'gestion.User'
+AUTH_USER_MODEL = 'gestion.Utilisateur'
 
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
@@ -156,7 +157,6 @@ REST_FRAMEWORK = {
     ),
 }
 
-
 CORS_ALLOW_ALL_ORIGINS = True  # Autorise toutes les requêtes (pour le développement)
 
 # Paramètres Celery
@@ -172,3 +172,6 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
+
+
+GOOGLE_OAUTH2_CLIENT_ID = '380403399725-mipoiq1l59ca8fl6eq1o2rpe4f3iv0ro.apps.googleusercontent.com'

@@ -1,5 +1,4 @@
 from rest_framework import serializers
-
 from django.contrib.auth.hashers import make_password
 from .models import Utilisateur, Classe, Exercice, Soumission, Correction, PerformanceEtudiant
 from django.utils import timezone
@@ -9,7 +8,7 @@ class UtilisateurSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Utilisateur
-        fields = ['id', 'username', 'email', 'password', 'role', 'photo_profil', 'date_inscription']
+        fields = ['id', 'username', 'email', 'password', 'role', 'photo_profil', 'date_inscription', 'matricule']
         read_only_fields = ['date_inscription']
         extra_kwargs = {
             'password': {'write_only': True},
@@ -126,7 +125,6 @@ class ExerciceSerializer(serializers.ModelSerializer):
     
 
 
-
 class CorrectionSerializer(serializers.ModelSerializer):
     soumission_details = SoumissionSerializer(source='soumission', read_only=True)
     
@@ -233,6 +231,3 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token = super().get_token(user)
         token['role'] = user.role  # 👈 Ajoute le rôle dans le token
         return token
-
-
-
