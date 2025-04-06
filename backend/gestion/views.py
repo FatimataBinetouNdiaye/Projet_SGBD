@@ -6,6 +6,9 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from .tasks import process_submission
+from rest_framework.parsers import MultiPartParser, FormParser
+
 from .models import Exercice, Soumission, Correction, PerformanceEtudiant
 
 class UtilisateurViewSet(viewsets.ModelViewSet):
@@ -64,13 +67,14 @@ class DashboardView(APIView):
     def get(self, request):
         # Implémentation vue précédente...
         pass
-from rest_framework.parsers import MultiPartParser, FormParser
+
+
 class UploadSoumissionView(APIView):
-    parser_classes = [MultiPartParser]
     permission_classes = [permissions.IsAuthenticated]
-    
+
     def post(self, request, exercice_id):
         exercice = get_object_or_404(Exercice, pk=exercice_id)
+        
         if not exercice.classe.etudiants.filter(id=request.user.id).exists():
             return Response({"error": "Accès non autorisé"}, status=status.HTTP_403_FORBIDDEN)
         
@@ -85,10 +89,9 @@ class UploadSoumissionView(APIView):
             nom_original=fichier_pdf.name
         )
         
-        # Démarrer la correction automatique
-        from .tasks import process_submission
+        # Démarrer la correction automatique via la tâche Celery
         process_submission.delay(soumission.id)
-        
+
         return Response({"status": "success"}, status=status.HTTP_201_CREATED)
 
 

@@ -51,6 +51,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # Ajout du middleware CORS
+    
 
 ]
 
@@ -83,9 +84,14 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'projet_sgbd',
         'USER': 'root',  
-        'PASSWORD': 'oracle', 
-        'HOST': 'localhost',
+        'PASSWORD': '', 
+        'HOST': '127.0.0.1',
         'PORT': '3306',
+        'OPTIONS': {
+            'sql_mode': 'STRICT_TRANS_TABLES',
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            'client_flag': 2,
+        }
     }
 }
 

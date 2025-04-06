@@ -27,7 +27,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'projet_BD',
         'USER': 'root',  # Modifier avec votre utilisateur MySQL
-        'PASSWORD': 'passer123@',
+        'PASSWORD': '',
         'HOST': 'localhost',
         'PORT': '3306',
     }

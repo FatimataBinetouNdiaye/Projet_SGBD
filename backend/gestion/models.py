@@ -181,31 +181,24 @@ class Correction(models.Model):
     """
     Corrections générées par l'IA et potentiellement modifiées par les professeurs
     """
-    # Relation
-    soumission = models.OneToOneField(Soumission, on_delete=models.CASCADE, 
-                                    related_name='correction',
-                                    verbose_name="Soumission associée")
-    
-    # Résultats
+    soumission = models.OneToOneField(Soumission, on_delete=models.CASCADE, related_name='correction', verbose_name="Soumission associée")
     note = models.FloatField(verbose_name="Note sur 20")
     feedback = models.TextField(verbose_name="Retour détaillé")
     points_forts = models.TextField(verbose_name="Points forts identifiés")
     points_faibles = models.TextField(verbose_name="Points à améliorer")
-    
-    # Métadonnées IA
     modele_ia_utilise = models.CharField(max_length=100, verbose_name="Modèle d'IA utilisé")
     date_generation = models.DateTimeField(auto_now_add=True, verbose_name="Date de génération")
-    temps_correction = models.FloatField(null=True, blank=True, 
-                                       verbose_name="Temps de correction (secondes)")
+    temps_correction = models.FloatField(null=True, blank=True, verbose_name="Temps de correction (secondes)")
     parametres_ia = models.JSONField(default=dict, verbose_name="Paramètres utilisés par l'IA")
-    
-    # Validation professeur
     est_validee = models.BooleanField(default=False, verbose_name="Validée par le professeur")
-    commentaire_professeur = models.TextField(blank=True, null=True, 
-                                            verbose_name="Commentaire du professeur")
-    date_validation = models.DateTimeField(null=True, blank=True, 
-                                         verbose_name="Date de validation")
-    
+    commentaire_professeur = models.TextField(blank=True, null=True, verbose_name="Commentaire du professeur")
+    date_validation = models.DateTimeField(null=True, blank=True, verbose_name="Date de validation")
+
+    def update_with_teacher_feedback(self, teacher_feedback):
+        self.commentaire_professeur = teacher_feedback
+        self.est_validee = True
+        self.save()
+
     class Meta:
         verbose_name = "Correction"
         verbose_name_plural = "Corrections"
