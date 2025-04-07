@@ -65,62 +65,132 @@ from django.core.validators import FileExtensionValidator
 
 
 class SoumissionSerializer(serializers.ModelSerializer):
-    exercice_titre = serializers.CharField(source='exercice.titre', read_only=True)
-    etudiant_nom = serializers.CharField(source='etudiant.get_full_name', read_only=True)
-    
     class Meta:
         model = Soumission
-        fields = [
-            'id', 'exercice', 'exercice_titre', 'etudiant', 'etudiant_nom',
-            'fichier_pdf', 'nom_original', 'taille_fichier', 'date_soumission',
-            'en_retard', 'est_plagiat', 'score_plagiat'
-        ]
-        read_only_fields = [
-            'etudiant', 'date_soumission', 'en_retard', 
-            'est_plagiat', 'score_plagiat'
-        ]
+        fields = '__all__'
+        read_only_fields = ('etudiant', 'date_soumission')
+
+    def validate(self, data):
+        if 'fichier_pdf' not in data:
+            raise serializers.ValidationError({"fichier_pdf": "Ce champ est obligatoire."})
+        if 'exercice' not in data:
+            raise serializers.ValidationError({"exercice": "Ce champ est obligatoire."})
+        return data
+
+from rest_framework import serializers
+from django.utils import timezone
+from django.core.validators import FileExtensionValidator
+
 class ExerciceSerializer(serializers.ModelSerializer):
-    soumissions = serializers.SerializerMethodField(read_only=True)
-    professeur_nom = serializers.CharField(source='professeur.get_full_name', read_only=True)
-    
+    soumissions = serializers.SerializerMethodField()
+    professeur_nom = serializers.SerializerMethodField()
+    peut_soumettre = serializers.SerializerMethodField()
+    temps_restant = serializers.SerializerMethodField()
+    est_expire = serializers.SerializerMethodField()
+
     class Meta:
         model = Exercice
-        fields = '__all__'
+        fields = [
+            'id', 'titre', 'description', 'consignes', 
+            'date_creation', 'date_limite', 'est_publie',
+            'professeur', 'professeur_nom', 'classe' , 'classe_nom',
+            'fichier_pdf', 'modele_correction',
+            'soumissions', 'peut_soumettre', 
+            'temps_restant', 'est_expire'
+        ]
         extra_kwargs = {
-           # 'professeur': {'read_only': True},  # Le professeur sera défini automatiquement
-            'fichier_pdf': {'required': False},  # Rendre le PDF optionnel
-            'deadline': {'required': True},      # Obligatoire
-            'consignes': {'required': False},  # Rendre optionnel
-            'modele_correction': {
-                'required': False,
-                'allow_null': True
-            },
+            'professeur': {'read_only': True},
+            'date_creation': {'read_only': True},
             'fichier_pdf': {
                 'required': False,
                 'validators': [FileExtensionValidator(['pdf'])]
             },
-            'classe': {'required': False},
-            'professeur': {'required': False}  # Rend le champ optionnel
+            'modele_correction': {
+                'required': False,
+                'validators': [FileExtensionValidator(['pdf'])]
+            }
         }
-    def validate(self, data):
-        # Validation personnalisée si nécessaire
-        if 'deadline' in data and data['deadline'] < timezone.now():
-            raise serializers.ValidationError({"deadline": "La date limite doit être dans le futur"})
-        return data
-    
-    def get_soumissions(self, obj):
-    # S'assurer que c'est bien une instance, pas un dict
-        if isinstance(obj, dict):
-            return []
 
+    def get_professeur_nom(self, obj):
+        return obj.professeur.get_full_name()
+
+    def get_peut_soumettre(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
+            return (
+                obj.est_publie and 
+                obj.date_limite and obj.date_limite > timezone.now() and
+                (request.user.role == Utilisateur.ETUDIANT or 
+                 request.user == obj.professeur)
+            )
+        return False
+
+    def get_temps_restant(self, obj):
+        if obj.date_limite and obj.date_limite > timezone.now():
+            delta = obj.date_limite - timezone.now()
+            return {
+                'jours': delta.days,
+                'heures': delta.seconds // 3600,
+                'minutes': (delta.seconds % 3600) // 60
+            }
+        return None
+
+    def get_est_expire(self, obj):
+        if obj.date_limite:
+            return obj.date_limite < timezone.now()
+        return False 
+
+    classe_nom = serializers.CharField(source='classe.nom', read_only=True)  # Add this
+    
+    def get_soumissions(self, obj):
+        try:
+            request = self.context.get('request')
+            if not request or not request.user.is_authenticated:
+                return []
+            
+            # Debug:
+            print(f"Getting submissions for exercise {obj.id}, user {request.user.id}")
+            
+            soumissions = obj.soumissions.select_related('etudiant')
             if request.user.role == Utilisateur.ETUDIANT:
-                queryset = obj.soumissions.filter(etudiant=request.user)
-            else:
-                queryset = obj.soumissions.all()
-            return SoumissionSerializer(queryset, many=True, context=self.context).data
-        return []
+                soumissions = soumissions.filter(etudiant=request.user)
+            
+            return SoumissionMiniSerializer(soumissions, many=True).data
+            
+        except Exception as e:
+            print(f"Error in get_soumissions: {str(e)}")
+            return []
+            
+    def validate_date_limite(self, value):
+        if value < timezone.now():
+            raise serializers.ValidationError(
+                "La date limite doit être dans le futur"
+            )
+        return value
+
+    def validate(self, data):
+        if 'date_limite' in data and data['date_limite'] < timezone.now():
+            raise serializers.ValidationError({
+                'date_limite': "La date limite est déjà passée"
+            })
+        
+        if self.instance and self.instance.est_publie:
+            if 'date_limite' in data and data['date_limite'] != self.instance.date_limite:
+                raise serializers.ValidationError({
+                    'date_limite': "Impossible de modifier la date limite après publication"
+                })
+        
+        return data
+
+class SoumissionMiniSerializer(serializers.ModelSerializer):
+    etudiant_nom = serializers.CharField(source='etudiant.get_full_name')
+    
+    class Meta:
+        model = Soumission
+        fields = [
+            'id', 'date_soumission', 'en_retard',
+            'etudiant', 'etudiant_nom', 'score_plagiat'
+        ]
 
     
 
@@ -165,6 +235,42 @@ class RecentSubmissionSerializer(serializers.ModelSerializer):
         model = Soumission
         fields = ['id', 'exercice_titre', 'date_soumission', 'score']
 
+
+from rest_framework import serializers
+from .models import Soumission
+
+class RecentSubmissionSerializer(serializers.ModelSerializer):
+    exercise_title = serializers.CharField(source='exercice.titre')
+    submission_date = serializers.DateTimeField(source='date_soumission')
+    score = serializers.SerializerMethodField()
+    exercise_id = serializers.IntegerField(source='exercice.id')
+
+    class Meta:
+        model = Soumission
+        fields = [
+            'id',
+            'exercise_title',
+            'submission_date', 
+            'score',
+            'exercise_id'
+        ]
+
+    def get_score(self, obj):
+        if hasattr(obj, 'correction'):
+            return obj.correction.note
+        return None
+
+class NextDeadlineSerializer(serializers.Serializer):
+    exercise_id = serializers.IntegerField()
+    exercise_title = serializers.CharField()
+    deadline_date = serializers.DateTimeField()
+    days_left = serializers.IntegerField()
+
+class DashboardStatsSerializer(serializers.Serializer):
+    completed = serializers.IntegerField()
+    total = serializers.IntegerField()
+    average_score = serializers.FloatField()
+    next_deadline = NextDeadlineSerializer(allow_null=True)
 
 class DashboardSerializer(serializers.Serializer):
     stats = DashboardStatsSerializer()

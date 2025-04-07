@@ -20,7 +20,7 @@ def google_validate_id_token(token):
     except ValueError:
         raise AuthenticationFailed('Le token Google est invalide ou a expiré.')
 
-def register_or_login_social_user(email, nom, prenom, provider, photo_url=None, role='ET'):
+def register_or_login_social_user(email, nom, first_name, provider, photo_url=None, role='ET'):
     user = Utilisateur.objects.filter(email=email).first()
     
     if user:
@@ -41,7 +41,7 @@ def register_or_login_social_user(email, nom, prenom, provider, photo_url=None, 
         
         new_user = Utilisateur.objects.create_user(
             email=email,
-            first_name=prenom,
+            first_name=first_name,  # changé ici
             last_name=nom,
             matricule=matricule,
             role=role,

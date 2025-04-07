@@ -81,14 +81,14 @@ class Exercice(models.Model):
     titre = models.CharField(max_length=200, verbose_name="Titre de l'exercice")
     description = models.TextField(verbose_name="Description détaillée")
     consignes = models.TextField(verbose_name="Consignes pour les étudiants")
-   
+    fichier_pdf = models.FileField(upload_to='exercices/', null=True, blank=True)  # <- ce champ doit exister
+
     # Relations
     classe = models.ForeignKey(Classe, on_delete=models.CASCADE, 
                              related_name='exercices',
                              verbose_name="Classe concernée")
 
     professeur = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.CASCADE)
-    date_inscription = models.DateTimeField(null=True, blank=True)
 
 
     # Fichiers et dates
@@ -141,6 +141,7 @@ class Soumission(models.Model):
         validators=[FileExtensionValidator(['pdf'])],
         verbose_name="Fichier PDF rendu"
     )
+    
     nom_original = models.CharField(max_length=255, verbose_name="Nom original du fichier")
     taille_fichier = models.PositiveIntegerField(verbose_name="Taille du fichier (octets)")
     
@@ -173,7 +174,12 @@ class Soumission(models.Model):
     
     def __str__(self):
         return f"Soumission de {self.etudiant} pour {self.exercice}"
-
+    def save(self, *args, **kwargs):
+        if self.fichier_pdf:
+            self.nom_original = self.fichier_pdf.name
+            self.taille_fichier = self.fichier_pdf.size
+        super().save(*args, **kwargs)
+        
 class Correction(models.Model):
     """
     Corrections générées par l'IA et potentiellement modifiées par les professeurs

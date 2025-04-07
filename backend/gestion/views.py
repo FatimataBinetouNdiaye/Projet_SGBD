@@ -18,102 +18,155 @@ from django.contrib.auth.models import AnonymousUser
 class ClasseViewSet(viewsets.ModelViewSet):
     queryset = Classe.objects.all()
     serializer_class = ClasseSerializer
+from django.utils import timezone
 from django.db.models import Prefetch
-from .serializers import ExerciceSerializer, SoumissionSerializer
-from rest_framework.exceptions import ValidationError  # Ajoutez cette ligne
-from rest_framework import serializers  # Si vous utilisez aussi serializers
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 
 class ExerciceViewSet(viewsets.ModelViewSet):
-    queryset = Exercice.objects.all()
+    """
+    ViewSet pour la gestion des exercices avec :
+    - Filtrage par rôle utilisateur
+    - Gestion des soumissions
+    - Publication/dépublication
+    """
     serializer_class = ExerciceSerializer
     permission_classes = [IsAuthenticated]
-
-    def perform_create(self, serializer):
-        # Associe automatiquement le professeur connecté
-        serializer.save(professeur=self.request.user)
+    http_method_names = ['get', 'post', 'patch', 'delete']  # Désactive PUT
 
     def get_queryset(self):
         user = self.request.user
+        now = timezone.now()
+        
+        queryset = Exercice.objects.select_related('professeur', 'classe')
         
         if user.role == Utilisateur.PROFESSEUR:
-            # Professeur voit seulement ses exercices
-            queryset = Exercice.objects.filter(professeur=user)
+            # Professeurs voient leurs exercices + stats soumissions
+            queryset = queryset.filter(professeur=user)
         else:
-            # Étudiants voient seulement les exercices publiés
-            queryset = Exercice.objects.filter(est_publie=True)
+            # Étudiants voient seulement les exercices publiés et non expirés
+            queryset = queryset.filter(
+                est_publie=True,
+                date_limite__gte=now,
+                
+            )
         
-        return queryset.select_related('professeur', 'classe').order_by('-date_creation')
+        # Optimisation pour la liste
+        if self.action == 'list':
+            queryset = queryset.prefetch_related(
+                Prefetch('soumissions', 
+                       queryset=Soumission.objects.select_related('etudiant')
+                       .only('id', 'date_soumission', 'etudiant__last_name', 'etudiant__first_name'))
+            )
+        
+        return queryset.order_by('-date_creation')
 
+    def perform_create(self, serializer):
+        """Associe automatiquement le professeur connecté"""
+        if self.request.user.role != Utilisateur.PROFESSEUR:
+            raise PermissionDenied("Seuls les professeurs peuvent créer des exercices")
+        serializer.save(professeur=self.request.user)
 
     @action(detail=True, methods=['get'])
     def submissions(self, request, pk=None):
-        """Endpoint personnalisé pour les soumissions d'un exercice"""
+        """Liste des soumissions pour un exercice"""
         exercice = self.get_object()
         
-        if isinstance(request.user, AnonymousUser):
-            return Response(
-                {"error": "Authentification requise"},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-            
+        # Vérification des permissions
+        if request.user.role == Utilisateur.ETUDIANT:
+            if not exercice.est_publie or exercice.date_limite < timezone.now():
+                raise PermissionDenied("Exercice non disponible")
+        
         # Préchargement optimisé
-        soumissions = exercice.soumissions.select_related('etudiant', 'exercice')
+        soumissions = exercice.soumissions.select_related(
+            'etudiant'
+        ).prefetch_related(
+            'exercice'
+        )
         
         if request.user.role == Utilisateur.ETUDIANT:
             soumissions = soumissions.filter(etudiant=request.user)
         
+        page = self.paginate_queryset(soumissions)
         serializer = SoumissionSerializer(
-            soumissions,
+            page if page is not None else soumissions,
             many=True,
             context={'request': request}
         )
-        return Response(serializer.data)
-
-    def list(self, request, *args, **kwargs):
-        """Version optimisée de la liste avec pagination"""
-        queryset = self.filter_queryset(self.get_queryset())
         
-        # Préchargement supplémentaire pour la liste
-        queryset = queryset.prefetch_related(
-            Prefetch('soumissions', 
-                   queryset=Soumission.objects.select_related('etudiant'))
-        )
-        
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return self.get_paginated_response(serializer.data) if page else Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
-        """Action personnalisée pour publier/dépublier un exercice"""
+        """Publication/Dépublication d'un exercice"""
         exercice = self.get_object()
         
         if exercice.professeur != request.user:
-            return Response(
-                {"error": "Seul le professeur propriétaire peut publier"},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            raise PermissionDenied("Action réservée au professeur propriétaire")
         
         exercice.est_publie = not exercice.est_publie
         exercice.save()
         
         return Response({
             'status': 'published' if exercice.est_publie else 'unpublished',
+            'date_limite': exercice.date_limite,
             'exercice_id': exercice.id
         })
-class SoumissionViewSet(viewsets.ModelViewSet):
-    serializer_class = SoumissionSerializer
 
-    def get_queryset(self):
-        user = self.request.user
-        if user.role == Utilisateur.ETUDIANT:
-            return Soumission.objects.filter(etudiant=user)
-        return Soumission.objects.filter(exercice__professeur=user)
+    @action(detail=False, methods=['get'])
+    def actifs(self, request):
+        try:
+            # Debug: Affiche l'utilisateur et son rôle
+            print(f"Utilisateur connecté : {request.user.id} - Rôle : {request.user.role}")
+            
+            queryset = Exercice.objects.filter(
+                est_publie=True,
+                date_limite__gte=timezone.now()
+            ).select_related('professeur')
+            
+            # Debug: Affiche les exercices trouvés
+            print(f"Exercices trouvés : {queryset.count()}")
+            for ex in queryset[:3]:  # Affiche les 3 premiers pour debug
+                print(f"Exercice {ex.id}: {ex.titre} - Date limite: {ex.date_limite}")
+
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'status': 'success',
+                'count': queryset.count(),
+                'data': serializer.data
+            })
+        
+        except Exception as e:
+            import traceback
+            traceback.print_exc()  # Affiche la stack trace complète
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser
+from django.shortcuts import get_object_or_404
+from .models import Soumission, Exercice, Utilisateur
+from .serializers import SoumissionSerializer
+from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import MultiPartParser, FormParser
+class SoumissionViewSet(viewsets.ModelViewSet):
+    queryset = Soumission.objects.all()
+    serializer_class = SoumissionSerializer
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(
+            etudiant=self.request.user,
+            nom_original=self.request.FILES['fichier_pdf'].name,
+            taille_fichier=self.request.FILES['fichier_pdf'].size
+        )
 
 class CorrectionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CorrectionSerializer
@@ -128,81 +181,67 @@ class DashboardView(APIView):
     def get(self, request):
         return student_dashboard_data(request)
 
-class UploadSoumissionView(APIView):
-    parser_classes = [MultiPartParser]
-    
-    def post(self, request, exercice_id):
-        exercice = get_object_or_404(Exercice, pk=exercice_id)
-        if request.user.role != Utilisateur.ETUDIANT:
-            return Response({"error": "Seuls les étudiants peuvent soumettre des travaux"}, 
-                          status=status.HTTP_403_FORBIDDEN)
-        
-        if not exercice.classe.etudiants.filter(id=request.user.id).exists():
-            return Response({"error": "Vous n'êtes pas dans cette classe"}, 
-                          status=status.HTTP_403_FORBIDDEN)
-        
-        fichier_pdf = request.FILES.get('fichier')
-        if not fichier_pdf:
-            return Response({"error": "Fichier manquant"}, 
-                          status=status.HTTP_400_BAD_REQUEST)
-        
-        soumission = Soumission.objects.create(
-            exercice=exercice,
-            etudiant=request.user,
-            fichier_pdf=fichier_pdf,
-            nom_original=fichier_pdf.name,
-            taille_fichier=fichier_pdf.size
-        )
-        
-        return Response(
-            {"status": "success", "submission_id": soumission.id},
-            status=status.HTTP_201_CREATED
-        )
 
+from .models import (
+    PerformanceEtudiant, 
+    Exercice, 
+    Soumission, 
+    Utilisateur,
+    Correction
+)
+from .serializers import (
+    DashboardSerializer,
+    RecentSubmissionSerializer,
+    NextDeadlineSerializer
+)
+from rest_framework.decorators import permission_classes
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def student_dashboard_data(request):
     student = request.user
     
-    average_score = PerformanceEtudiant.objects.filter(
-        etudiant=student
-    ).aggregate(average=Avg('note'))['average'] or 0
+    # Calcul des statistiques
+    stats = {
+        'completed': Soumission.objects.filter(etudiant=student).count(),
+        'total': Exercice.objects.filter(classe__etudiants=student).count(),
+        'average_score': round(
+            PerformanceEtudiant.objects.filter(etudiant=student)
+            .aggregate(average=Avg('note'))['average'] or 0,
+        1
+        ),
+        'next_deadline': get_next_deadline(student)
+    }
     
-    next_deadline = Exercice.objects.filter(
+    # Récupération des soumissions récentes
+    recent_submissions = Soumission.objects.filter(
+        etudiant=student
+    ).select_related('exercice', 'correction') \
+     .order_by('-date_soumission')[:5]
+    
+    data = {
+        'stats': stats,
+        'recent_submissions': recent_submissions
+    }
+    
+    serializer = DashboardSerializer(data)
+    return Response(serializer.data)
+
+def get_next_deadline(student):
+    next_ex = Exercice.objects.filter(
         classe__etudiants=student,
         date_limite__gt=timezone.now()
     ).exclude(
         pk__in=Soumission.objects.filter(etudiant=student).values('exercice')
     ).order_by('date_limite').first()
     
-    recent_submissions = Soumission.objects.filter(
-        etudiant=student
-    ).select_related('exercice', 'correction').order_by('-date_soumission')[:3]
-    
-    data = {
-        'stats': {
-            'completed': Soumission.objects.filter(etudiant=student).count(),
-            'total': Exercice.objects.filter(classe__etudiants=student).count(),
-            'average_score': round(average_score, 1),
-            'next_deadline': {
-                'days_left': (next_deadline.date_limite - timezone.now()).days if next_deadline else None,
-                'exercise_title': next_deadline.titre if next_deadline else None
-            }
-        },
-        'recent_submissions': [
-            {
-                'id': sub.id,
-                'exercise_title': sub.exercice.titre,
-                'submission_date': sub.date_soumission,
-                'score': sub.correction.note if hasattr(sub, 'correction') else None,
-                'exercise_id': sub.exercice.id
-            }
-            for sub in recent_submissions
-        ]
-    }
-    
-    return Response(data)
-
-
+    if next_ex:
+        return {
+            'exercise_id': next_ex.id,
+            'exercise_title': next_ex.titre,
+            'deadline_date': next_ex.date_limite,
+            'days_left': (next_ex.date_limite - timezone.now()).days
+        }
+    return None
 
 
 @api_view(['GET'])
@@ -288,8 +327,8 @@ class GoogleSocialAuthView(APIView):
             # Enregistrer ou connecter l'utilisateur
             auth_data = register_or_login_social_user(
                 email=user_data['email'],
-                nom=user_data.get('family_name', ''),
-                prenom=user_data.get('given_name', ''),
+                last_name=user_data.get('family_name', ''),  
+                first_name=user_data.get('given_name', ''), 
                 provider='google',
                 photo_url=user_data.get('picture'),
                 role=role
