@@ -1,7 +1,29 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
+
+class UtilisateurManager(BaseUserManager):
+    def create_user(self, email, first_name, last_name, matricule, password=None, **extra_fields):
+        """
+        Crée et retourne un utilisateur avec un email, un mot de passe et les autres champs requis.
+        """
+        if not email:
+            raise ValueError("L'email est obligatoire")
+        email = self.normalize_email(email)
+        user = self.model(email=email, first_name=first_name, last_name=last_name, matricule=matricule, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, first_name, last_name, matricule, password=None, **extra_fields):
+        """
+        Crée et retourne un superutilisateur avec un mot de passe.
+        """
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        return self.create_user(email, first_name, last_name, matricule, password, **extra_fields)
 
 
 class Utilisateur(AbstractUser):
@@ -16,13 +38,16 @@ class Utilisateur(AbstractUser):
         (ETUDIANT, 'Étudiant'),
         (PROFESSEUR, 'Professeur'),
     ]
-    
+    objects = UtilisateurManager()
     # Champs de base
     role = models.CharField(max_length=2, choices=ROLE_CHOICES, verbose_name="Rôle", default=ETUDIANT)
     email = models.EmailField(unique=True, verbose_name="Adresse email")
     photo_profil = models.ImageField(upload_to='profils/', null=True, blank=True)
-    date_inscription = models.DateTimeField(auto_now_add=False, default=timezone.now)
-
+    date_inscription = models.DateTimeField(
+        auto_now_add=True,
+        null=True,
+        blank=True
+    )
 
     # Champs pour OAuth
     fournisseur_oauth = models.CharField(max_length=20, blank=True, null=True, 
@@ -42,6 +67,8 @@ class Utilisateur(AbstractUser):
 
     def __str__(self):
         return f"{self.get_full_name()} ({self.get_role_display()})"
+from django.contrib.auth.models import BaseUserManager
+
 
 
 class Classe(models.Model):
