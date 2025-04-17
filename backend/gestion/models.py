@@ -3,6 +3,28 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
 
+class UtilisateurManager(BaseUserManager):
+    def create_user(self, email, first_name, last_name, matricule, password=None, **extra_fields):
+        """
+        Crée et retourne un utilisateur avec un email, un mot de passe et les autres champs requis.
+        """
+        if not email:
+            raise ValueError("L'email est obligatoire")
+        email = self.normalize_email(email)
+        user = self.model(email=email, first_name=first_name, last_name=last_name, matricule=matricule, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, first_name, last_name, matricule, password=None, **extra_fields):
+        """
+        Crée et retourne un superutilisateur avec un mot de passe.
+        """
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        return self.create_user(email, first_name, last_name, matricule, password, **extra_fields)
+
 
 class Utilisateur(AbstractUser):
     """
