@@ -1,8 +1,8 @@
+from django.shortcuts import redirect
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
 from gestion.views import CustomTokenObtainPairView
-from django.urls import path
 from .views import utilisateur_connecte  # ← Cette ligne est essentielle
 from .views import GoogleSocialAuthView
 
@@ -16,6 +16,8 @@ router.register(r'corrections', views.CorrectionViewSet, basename='correction')
 
 
 urlpatterns = [
+    path('', lambda request: redirect('api/')),  # Redirige vers l'API ou une autre page
+
     path('api/', include(router.urls)),
     path('api/dashboard/', views.DashboardView.as_view(), name='dashboard'),
     path('api/stats/', views.StatsView.as_view(), name='stats'),  # <-- Nouvelle route
@@ -27,7 +29,4 @@ urlpatterns = [
     path('api/signup/', views.signup, name='signup'),  # Cette ligne doit correspondre exactement à l'URL dans votre requête
     
     
-
-
-
 ]
