@@ -3,28 +3,6 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
 
-class UtilisateurManager(BaseUserManager):
-    def create_user(self, email, first_name, last_name, matricule, password=None, **extra_fields):
-        """
-        Crée et retourne un utilisateur avec un email, un mot de passe et les autres champs requis.
-        """
-        if not email:
-            raise ValueError("L'email est obligatoire")
-        email = self.normalize_email(email)
-        user = self.model(email=email, first_name=first_name, last_name=last_name, matricule=matricule, **extra_fields)
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
-
-    def create_superuser(self, email, first_name, last_name, matricule, password=None, **extra_fields):
-        """
-        Crée et retourne un superutilisateur avec un mot de passe.
-        """
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-
-        return self.create_user(email, first_name, last_name, matricule, password, **extra_fields)
-
 
 class Utilisateur(AbstractUser):
     """
@@ -32,22 +10,22 @@ class Utilisateur(AbstractUser):
     avec système de rôles (Étudiant/Professeur) et authentification OAuth
     """
     
+    objects = UtilisateurManager()
+
+
     ETUDIANT = 'ET'
     PROFESSEUR = 'PR'
     ROLE_CHOICES = [
         (ETUDIANT, 'Étudiant'),
         (PROFESSEUR, 'Professeur'),
     ]
-    objects = UtilisateurManager()
+    
     # Champs de base
     role = models.CharField(max_length=2, choices=ROLE_CHOICES, verbose_name="Rôle", default=ETUDIANT)
     email = models.EmailField(unique=True, verbose_name="Adresse email")
     photo_profil = models.ImageField(upload_to='profils/', null=True, blank=True)
-    date_inscription = models.DateTimeField(
-        auto_now_add=True,
-        null=True,
-        blank=True
-    )
+    date_inscription = models.DateTimeField(auto_now_add=False, default=timezone.now)
+
 
     # Champs pour OAuth
     fournisseur_oauth = models.CharField(max_length=20, blank=True, null=True, 
@@ -297,30 +275,21 @@ class Correction(models.Model):
     """
     Corrections générées par l'IA et potentiellement modifiées par les professeurs
     """
-    # Relation
-    soumission = models.OneToOneField(Soumission, on_delete=models.CASCADE, 
-                                    related_name='correction',
-                                    verbose_name="Soumission associée")
+    soumission = models.OneToOneField(Soumission, on_delete=models.CASCADE, related_name='correction', verbose_name="Soumission associée")
     
-    # Résultats
     note = models.FloatField(verbose_name="Note sur 20")
     feedback = models.TextField(verbose_name="Retour détaillé")
     points_forts = models.TextField(verbose_name="Points forts identifiés")
     points_faibles = models.TextField(verbose_name="Points à améliorer")
     
-    # Métadonnées IA
     modele_ia_utilise = models.CharField(max_length=100, verbose_name="Modèle d'IA utilisé")
     date_generation = models.DateTimeField(auto_now_add=True, verbose_name="Date de génération")
-    temps_correction = models.FloatField(null=True, blank=True, 
-                                       verbose_name="Temps de correction (secondes)")
+    temps_correction = models.FloatField(null=True, blank=True, verbose_name="Temps de correction (secondes)")
     parametres_ia = models.JSONField(default=dict, verbose_name="Paramètres utilisés par l'IA")
     
-    # Validation professeur
     est_validee = models.BooleanField(default=False, verbose_name="Validée par le professeur")
-    commentaire_professeur = models.TextField(blank=True, null=True, 
-                                            verbose_name="Commentaire du professeur")
-    date_validation = models.DateTimeField(null=True, blank=True, 
-                                         verbose_name="Date de validation")
+    commentaire_professeur = models.TextField(blank=True, null=True, verbose_name="Commentaire du professeur")
+    date_validation = models.DateTimeField(null=True, blank=True, verbose_name="Date de validation")
     
     class Meta:
         verbose_name = "Correction"
@@ -329,6 +298,7 @@ class Correction(models.Model):
     
     def __str__(self):
         return f"Correction de {self.soumission} ({self.note}/20)"
+
 
 class PerformanceEtudiant(models.Model):
     """
@@ -490,3 +460,50 @@ class ParametresPlateforme(models.Model):
         self.__class__.objects.exclude(id=self.id).delete()
         super().save(*args, **kwargs)
 
+def update_correction_model(professor_feedback, correction_id):
+    """
+    Permet au professeur de valider ou ajuster la correction générée par l'IA.
+    Les ajustements sont enregistrés pour affiner l'algorithme d'IA.
+    """
+    correction = Correction.objects.get(id=correction_id)
+    
+    # Appliquer le feedback du professeur sur l'évaluation
+    correction.commentaire_professeur = professor_feedback
+    correction.save()
+
+    # Utiliser le feedback pour améliorer l'IA (logique d'apprentissage)
+    retrain_ai_model(professor_feedback)  # Appeler la fonction de réentraînement de l'IA
+
+
+    
+    
+def retrain_ai_model(professor_feedback):
+    """
+    Exemple d'une fonction pour réentraîner le modèle d'IA basé sur le feedback du professeur.
+    Cette fonction peut être ajustée pour appeler un service externe d'IA ou pour 
+    entraîner un modèle localement.
+    """
+    # Sauvegarder le feedback dans la base de données pour analyse future
+    feedback_entry = Feedback(feedback_text=professor_feedback)
+    feedback_entry.save()
+
+    # Logique d'apprentissage (si nécessaire) : exemple de réentraînement via un modèle local ou API
+    print(f"Feedback reçu pour réentraînement du modèle : {professor_feedback}")
+    
+    # Si tu utilises une API distante pour réentraîner, ajoute ici l'appel à l'API d'IA
+    # Par exemple :
+    # url = "https://api.deepseek.com/retrain_model"
+    # data = {"feedback": professor_feedback}
+    # response = requests.post(url, json=data)
+    
+    # Si tu utilises un modèle local, tu peux aussi réentraîner ton modèle avec les données récupérées
+    # Exemple : appel à un script de réentraînement local
+    # subprocess.run(["python3", "scripts/retrain_model.py", "--feedback", professor_feedback])
+
+
+class Feedback(models.Model):
+    feedback_text = models.TextField(verbose_name="Feedback du professeur")
+    date_received = models.DateTimeField(auto_now_add=True, verbose_name="Date de réception")
+    
+    def __str__(self):
+        return f"Feedback reçu le {self.date_received}"

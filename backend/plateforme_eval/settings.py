@@ -85,9 +85,9 @@ WSGI_APPLICATION = 'plateforme_eval.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'projet_sgbd',
+        'NAME': 'projet_sgbd_bis',
         'USER': 'root',  
-        'PASSWORD': 'oracle', 
+        'PASSWORD': '', 
         'HOST': 'localhost',
         'PORT': '3306',
     }
@@ -165,7 +165,7 @@ CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'Europe/Paris'
+CELERY_TIMEZONE = 'UTC'
 from datetime import timedelta  # Ajoutez cette ligne en haut du fichier
 
 SIMPLE_JWT = {

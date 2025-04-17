@@ -3,7 +3,6 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
 from gestion.views import CustomTokenObtainPairView
-from django.urls import path
 from .views import utilisateur_connecte  # ← Cette ligne est essentielle
 from .views import GoogleSocialAuthView
 from .views import student_dashboard_data
@@ -24,12 +23,9 @@ urlpatterns = [
     path('api/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/utilisateur-connecte/', utilisateur_connecte),
     path('google-auth/', GoogleSocialAuthView.as_view(), name='google-auth'),
-    path('api/signup/', views.signup, name='signup'),  # Cette ligne doit correspondre exactement à l'URL dans votre requête
+    path('api/signup/', views.signup, name='signup'), 
     path('api/student/dashboard/', student_dashboard_data, name='student-dashboard'),
 
     
     
-
-
-
 ]

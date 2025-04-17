@@ -1,3 +1,6 @@
+
+from .models import update_correction_model 
+
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -155,6 +158,8 @@ from .models import Soumission, Exercice, Utilisateur
 from .serializers import SoumissionSerializer
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser, FormParser
+from gestion.tasks import process_submission  # Importer la tâche Celery
+
 class SoumissionViewSet(viewsets.ModelViewSet):
     queryset = Soumission.objects.all()
     serializer_class = SoumissionSerializer
@@ -162,17 +167,31 @@ class SoumissionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        serializer.save(
-            etudiant=self.request.user,
-            nom_original=self.request.FILES['fichier_pdf'].name,
-            taille_fichier=self.request.FILES['fichier_pdf'].size
+        # Crée la soumission avec les données fournies dans le formulaire
+        soumission = serializer.save(
+            etudiant=self.request.user,  # Associe l'étudiant connecté
+            nom_original=self.request.FILES['fichier_pdf'].name,  # Enregistre le nom du fichier
+            taille_fichier=self.request.FILES['fichier_pdf'].size  # Enregistre la taille du fichier
         )
 
+        # Lancer la tâche Celery pour effectuer la correction
+        process_submission.delay(soumission.id)  # Lancer la correction en arrière-plan via Celery
+
+        # Retourner une réponse immédiate pour informer l'utilisateur
+        return Response({'message': 'Soumission reçue, correction en cours...'}, status=status.HTTP_201_CREATED)
+    
 class CorrectionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CorrectionSerializer
+    permission_classes = [IsAuthenticated]  # Assure-toi que l'utilisateur est authentifié
 
     def get_queryset(self):
         user = self.request.user
+
+        # Vérifie si l'utilisateur est authentifié
+        if not user.is_authenticated:
+            raise PermissionDenied("Vous devez être authentifié pour accéder à cette ressource.")
+
+        # Vérifie le rôle de l'utilisateur
         if user.role == Utilisateur.ETUDIANT:
             return Correction.objects.filter(soumission__etudiant=user)
         return Correction.objects.filter(soumission__exercice__professeur=user)
@@ -346,3 +365,14 @@ def signup(request):
             user = serializer.save()  # Créer un nouvel utilisateur
             return Response({"message": "Utilisateur créé avec succès"}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+@api_view(['POST'])
+def update_feedback(request, correction_id):
+    """
+    Permet au professeur d'ajuster ou valider la correction générée par l'IA.
+    """
+    professor_feedback = request.data['feedback']
+    update_correction_model(professor_feedback, correction_id)
+    return Response({'message': 'Feedback mis à jour et utilisé pour améliorer l\'IA.'})
