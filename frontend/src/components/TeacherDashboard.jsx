@@ -109,9 +109,11 @@ const TeacherDashboard = () => {
     const formData = new FormData();
     formData.append('titre', newExercise.titre);
     formData.append('description', newExercise.description);
-    formData.append('deadline', newExercise.deadline);
-    formData.append('est_publie', newExercise.est_publie);
     formData.append('consignes', newExercise.consignes);
+    formData.append('difficulte', newExercise.difficulte); // Ajout du champ difficulté
+    formData.append('date_limite', new Date(newExercise.deadline).toISOString()); // Correction du nom et format
+    
+    formData.append('est_publie', newExercise.est_publie);
     if (newExercise.classe) formData.append('classe', newExercise.classe);
     
     const difficulteToPonderation = {
@@ -137,12 +139,33 @@ const TeacherDashboard = () => {
       }
   
       resetForm();
-      // Recharger les données
-      const exercisesRes = await axios.get('http://127.0.0.1:8000/api/exercices/', { headers });
-      setExercises(exercisesRes.data);
+      loadData();
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur lors de l\'envoi du formulaire');
     }
+  };
+  
+  // Dans la fonction openEditModal, corrigez la date :
+  const openEditModal = (exercise) => {
+    setNewExercise({
+      titre: exercise.titre,
+      description: exercise.description,
+      difficulte: exercise.difficulte || 'Moyenne',
+      deadline: exercise.date_limite ? formatDateForInput(exercise.date_limite) : '',
+      consignes: exercise.consignes,
+      classe: exercise.classe?.id || '',
+      est_publie: exercise.est_publie
+    });
+    setEditId(exercise.id);
+    setIsEditMode(true);
+    setShowModal(true);
+  };
+  
+  // Ajoutez cette fonction utilitaire pour formater la date
+  const formatDateForInput = (dateString) => {
+    const date = new Date(dateString);
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    return date.toISOString().slice(0, 16);
   };
 
   const resetForm = () => {
@@ -154,20 +177,7 @@ const TeacherDashboard = () => {
     setEditId(null);
   };
 
-  const openEditModal = (exercise) => {
-    setNewExercise({
-      titre: exercise.titre,
-      description: exercise.description,
-      difficulte: exercise.difficulte || 'Moyenne',
-      deadline: exercise.deadline,
-      consignes: exercise.consignes,
-      classe: exercise.classe,
-      est_publie: exercise.est_publie
-    });
-    setEditId(exercise.id);
-    setIsEditMode(true);
-    setShowModal(true);
-  };
+  
 
   const handleDeleteExercise = async (id) => {
     if (!window.confirm("Êtes-vous sûr de vouloir supprimer cet exercice ?")) return;
@@ -237,8 +247,8 @@ const TeacherDashboard = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(ex.deadline).toLocaleDateString()}
-                  </td>
+  {ex.date_limite ? new Date(ex.date_limite).toLocaleDateString() : 'Non définie'}
+</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
                       <button className="text-blue-500 hover:text-blue-700">

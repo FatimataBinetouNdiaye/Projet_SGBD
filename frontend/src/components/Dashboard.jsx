@@ -3,45 +3,61 @@ import { BarChart, CheckCircle, Clock } from 'lucide-react';
 import axios from 'axios';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState({
-    stats: {
-      completed: 0,
-      total: 0,
-      average_score: 0,
-      next_deadline: null
-    },
+    stats: { completed: 0, total: 0, average_score: 0, next_deadline: null },
     recent_submissions: []
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // Récupérez le token exactement comme stocké dans le Login
+    const token = localStorage.getItem('token'); // Notez que c'est 'token' et non 'access_token'
+    const userData = JSON.parse(localStorage.getItem('user'));
+
+    if (!token || !userData) {
+      navigate('/login');
+      return;
+    }
+
     const fetchDashboardData = async () => {
       try {
-        const response = await axios.get('/api/student/dashboard/');
-        
-        // Normalisation des données avec valeurs par défaut
+        const response = await axios.get('http://127.0.0.1:8000/api/student/dashboard/', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
         setDashboardData({
-          stats: {
-            completed: response.data.stats?.completed || 0,
-            total: response.data.stats?.total || 0,
-            average_score: response.data.stats?.average_score || 0,
-            next_deadline: response.data.stats?.next_deadline || null
+          stats: response.data.stats || {
+            completed: 0,
+            total: 0,
+            average_score: 0,
+            next_deadline: null
           },
           recent_submissions: response.data.recent_submissions || []
         });
       } catch (err) {
-        console.error('Erreur:', err);
-        setError("Impossible de charger les données");
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          navigate('/login');
+        } else {
+          setError(err.response?.data?.message || "Erreur de chargement des données");
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchDashboardData();
-  }, []);
+  }, [navigate]);
+
 
   // ... (gardez le reste de votre code de rendu tel quel)
 
@@ -173,4 +189,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard;
+export default Dashboard; 
