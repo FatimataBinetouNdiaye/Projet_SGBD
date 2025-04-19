@@ -173,5 +173,17 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 
+OLLAMA_API_URL = "http://localhost:11434"           # port par défaut d’Ollama
+OLLAMA_API_KEY = 'id_ed25519.pub'  # Remplace par ta clé API Ollama
+OLLAMA_GENERATE_PATH = "/api/generate"  # ou "/v1/chat/completions"
+# …
+DEEPEEK_API_URL = f"{OLLAMA_API_URL}{OLLAMA_GENERATE_PATH}"
+
+OLLAMA_MODELS =  Path(r"C:\Users\hp\.ollama\models")
+
+#DEEPSEEK_API_KEY = 'sk-8fc9673f5b6c45f6ac3a42b75fca5caa'  # Remplace par ta clé API DeepSeek
+
+
+
 
 GOOGLE_OAUTH2_CLIENT_ID = '380403399725-mipoiq1l59ca8fl6eq1o2rpe4f3iv0ro.apps.googleusercontent.com'

@@ -36,7 +36,8 @@ class Utilisateur(AbstractUser):
     Modèle personnalisé pour gérer tous les utilisateurs de la plateforme
     avec système de rôles (Étudiant/Professeur) et authentification OAuth
     """
-    
+   
+
     objects = UtilisateurManager()
 
 
@@ -136,10 +137,16 @@ class Exercice(models.Model):
         upload_to='modeles_correction/',
         null=True,
         blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'docx'])]
+        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'docx'])],
+        verbose_name="Modèle de correction"
     )
-    ponderation = models.JSONField(default=dict, verbose_name="Pondération des critères")
-    
+
+    def save(self, *args, **kwargs):
+        # Assurer que le modèle est bien téléchargé et disponible pour la correction par l'IA
+        if self.modele_correction:
+            # Déclencher la gestion du modèle d'IA (cela peut être un signal ou une tâche asynchrone)
+            pass
+        super().save(*args, **kwargs)
     # Statut
     est_publie = models.BooleanField(default=False, verbose_name="Publié aux étudiants")
     
@@ -228,7 +235,9 @@ class Correction(models.Model):
     est_validee = models.BooleanField(default=False, verbose_name="Validée par le professeur")
     commentaire_professeur = models.TextField(blank=True, null=True, verbose_name="Commentaire du professeur")
     date_validation = models.DateTimeField(null=True, blank=True, verbose_name="Date de validation")
-    
+
+    contenu_brut = models.TextField(blank=True, null=True, verbose_name="Réponse brute de l'IA (non parsée)")
+
     class Meta:
         verbose_name = "Correction"
         verbose_name_plural = "Corrections"

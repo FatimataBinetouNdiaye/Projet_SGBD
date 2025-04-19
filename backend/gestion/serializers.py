@@ -2,11 +2,15 @@ from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from .models import Utilisateur, Classe, Exercice, Soumission, Correction, PerformanceEtudiant
 from django.utils import timezone
+from rest_framework import serializers
+from django.utils import timezone
+from django.core.validators import FileExtensionValidator
 
 class UtilisateurSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True)
     
     class Meta:
+        app_label = 'gestion'
         model = Utilisateur
         fields = ['id', 'username', 'email', 'password', 'role', 'photo_profil', 'date_inscription', 'matricule']
         read_only_fields = ['date_inscription']
@@ -63,23 +67,27 @@ class ExerciceListSerializer(serializers.ModelSerializer):
 
 from django.core.validators import FileExtensionValidator
 
+class CorrectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Correction
+        fields = ['id', 'note', 'feedback', 'points_forts', 'points_faibles']
+
 
 class SoumissionSerializer(serializers.ModelSerializer):
+    correction = CorrectionSerializer(read_only=True)
+
+
     class Meta:
         model = Soumission
-        fields = '__all__'
+        fields = [
+            'id', 'fichier_pdf', 'nom_original', 'taille_fichier',
+            'date_soumission', 'en_retard', 'ip_soumission',
+            'est_plagiat', 'score_plagiat', 'empreinte_texte',
+            'exercice', 'etudiant',
+            'correction'
+        ]
         read_only_fields = ('etudiant', 'date_soumission')
 
-    def validate(self, data):
-        if 'fichier_pdf' not in data:
-            raise serializers.ValidationError({"fichier_pdf": "Ce champ est obligatoire."})
-        if 'exercice' not in data:
-            raise serializers.ValidationError({"exercice": "Ce champ est obligatoire."})
-        return data
-
-from rest_framework import serializers
-from django.utils import timezone
-from django.core.validators import FileExtensionValidator
 
 class ExerciceSerializer(serializers.ModelSerializer):
     soumissions = serializers.SerializerMethodField()
@@ -195,17 +203,8 @@ class SoumissionMiniSerializer(serializers.ModelSerializer):
     
 
 
-class CorrectionSerializer(serializers.ModelSerializer):
-    soumission_details = SoumissionSerializer(source='soumission', read_only=True)
-    
-    class Meta:
-        model = Correction
-        fields = [
-            'id', 'soumission', 'soumission_details', 'note', 'feedback',
-            'points_forts', 'points_faibles', 'est_validee',
-            'commentaire_professeur', 'date_validation'
-        ]
-        read_only_fields = ['date_validation']
+
+ 
 
 
 class PerformanceEtudiantSerializer(serializers.ModelSerializer):
@@ -335,5 +334,5 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        token['role'] = user.role  # 👈 Ajoute le rôle dans le token
+        token['role'] = user.role  
         return token

@@ -1,4 +1,9 @@
 
+import os
+from django.http import JsonResponse
+
+from plateforme_eval import settings
+
 from .models import update_correction_model 
 
 from rest_framework import viewsets, status
@@ -9,9 +14,10 @@ from rest_framework.decorators import api_view, action
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Avg
-from .models import Utilisateur, Classe, Exercice, Soumission, Correction, PerformanceEtudiant
+from .models import *
 from .serializers import UtilisateurSerializer, ClasseSerializer, ExerciceSerializer, SoumissionSerializer, CorrectionSerializer
 from rest_framework.permissions import AllowAny  # <-- Ajoutez cette importation
+
 
 class UtilisateurViewSet(viewsets.ModelViewSet):
     queryset = Utilisateur.objects.all()
@@ -158,13 +164,16 @@ from .models import Soumission, Exercice, Utilisateur
 from .serializers import SoumissionSerializer
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser, FormParser
-from gestion.tasks import process_submission  # Importer la tâche Celery
+from gestion.tasks import get_ai_correction, process_submission  # Importer la tâche Celery
+
+from rest_framework import viewsets
+from rest_framework.response import Response
+from .models import Soumission
+from .tasks import process_submission  # Importer la tâche Celery
 
 class SoumissionViewSet(viewsets.ModelViewSet):
     queryset = Soumission.objects.all()
     serializer_class = SoumissionSerializer
-    parser_classes = [MultiPartParser, FormParser]
-    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
         # Crée la soumission avec les données fournies dans le formulaire
@@ -175,11 +184,12 @@ class SoumissionViewSet(viewsets.ModelViewSet):
         )
 
         # Lancer la tâche Celery pour effectuer la correction
-        process_submission.delay(soumission.id)  # Lancer la correction en arrière-plan via Celery
+        process_submission.delay(soumission.id)  # Lancer la tâche Celery en arrière-plan
 
         # Retourner une réponse immédiate pour informer l'utilisateur
         return Response({'message': 'Soumission reçue, correction en cours...'}, status=status.HTTP_201_CREATED)
-    
+
+
 class CorrectionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CorrectionSerializer
     permission_classes = [IsAuthenticated]  # Assure-toi que l'utilisateur est authentifié
@@ -382,9 +392,104 @@ def signup(request):
 
 @api_view(['POST'])
 def update_feedback(request, correction_id):
-    """
-    Permet au professeur d'ajuster ou valider la correction générée par l'IA.
-    """
     professor_feedback = request.data['feedback']
-    update_correction_model(professor_feedback, correction_id)
+    
+    correction = Correction.objects.get(id=correction_id)
+    correction.commentaire_professeur = professor_feedback
+    correction.save()
+    
+    retrain_ai_model(professor_feedback)  # Réentraîner l'IA avec le feedback du professeur
+    
     return Response({'message': 'Feedback mis à jour et utilisé pour améliorer l\'IA.'})
+
+
+#VUE DE IA
+
+
+# Créer une nouvelle vue pour traiter la correction par l'IA
+
+
+@api_view(['POST'])
+def process_ai_correction(request, soumission_id):
+    try:
+        soumission = Soumission.objects.get(id=soumission_id)
+    except Soumission.DoesNotExist:
+        return Response({"error": "Soumission non trouvée."}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        # Appeler la fonction pour obtenir la correction
+        correction = get_ai_correction(soumission.fichier_pdf.path)  # Vérifie que le fichier est accessible
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    Correction.objects.create(
+        soumission=soumission,
+        note=correction['note'],
+        feedback=correction['feedback'],
+        points_forts=correction['points_forts'],
+        points_faibles=correction['points_faibles'],
+        modele_ia_utilise='DeepSeek',  # S'assurer d'utiliser le modèle correct
+    )
+
+    return Response({"message": "Correction effectuée par l'IA"}, status=status.HTTP_200_OK)
+
+
+
+
+# Gérer les retours des professeurs
+@api_view(['POST'])
+def update_feedback(request, correction_id):
+    professor_feedback = request.data['feedback']
+    
+    # Enregistrer le feedback pour analyse future
+    feedback_entry = Feedback(feedback_text=professor_feedback)
+    feedback_entry.save()
+
+    # Mettre à jour la correction avec le feedback du professeur
+    update_correction_model(professor_feedback, correction_id)
+
+    # Réentraîner l'IA avec ce feedback
+    retrain_ai_model(professor_feedback)
+
+    return Response({'message': 'Feedback mis à jour et utilisé pour améliorer l\'IA.'})
+
+
+def update_correction_model(professor_feedback, correction_id):
+    """
+    Met à jour la correction avec le feedback du professeur.
+    """
+    correction = Correction.objects.get(id=correction_id)
+    correction.commentaire_professeur = professor_feedback  # Met à jour le commentaire du professeur
+    correction.save()  # Sauvegarde la correction mise à jour
+
+
+@api_view(['GET'])
+def get_models(request):
+    models_dir = getattr(settings, 'OLLAMA_MODELS', None)
+    if not models_dir:
+        return JsonResponse(
+            {'error': 'Le paramètre OLLAMA_MODELS n’est pas défini.'},
+            status=500
+        )
+
+    # Convertir en str si c'est un Path
+    models_dir = str(models_dir)
+
+    if not os.path.isdir(models_dir):
+        return JsonResponse(
+            {'error': f'Le répertoire des modèles est introuvable ({models_dir}).'},
+            status=500
+        )
+
+    models = [
+        fname for fname in os.listdir(models_dir)
+        if os.path.isfile(os.path.join(models_dir, fname))
+    ]
+    return JsonResponse({'models': models})
+
+@api_view(['POST'])
+def generate_without_id(request):
+    sid = request.data.get('soumission_id')
+    if not sid:
+        return Response({'error':'Il faut passer `soumission_id`'}, status=400)
+    return process_ai_correction(request, sid)
