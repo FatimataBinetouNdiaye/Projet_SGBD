@@ -227,37 +227,11 @@ class DashboardStatsSerializer(serializers.Serializer):
     next_deadline = serializers.DictField()
 
 
-class RecentSubmissionSerializer(serializers.ModelSerializer):
-    exercice_titre = serializers.CharField(source='exercice.titre')
-    
-    class Meta:
-        model = Soumission
-        fields = ['id', 'exercice_titre', 'date_soumission', 'score']
 
 
 from rest_framework import serializers
 from .models import Soumission
 
-class RecentSubmissionSerializer(serializers.ModelSerializer):
-    exercise_title = serializers.CharField(source='exercice.titre')
-    submission_date = serializers.DateTimeField(source='date_soumission')
-    score = serializers.SerializerMethodField()
-    exercise_id = serializers.IntegerField(source='exercice.id')
-
-    class Meta:
-        model = Soumission
-        fields = [
-            'id',
-            'exercise_title',
-            'submission_date', 
-            'score',
-            'exercise_id'
-        ]
-
-    def get_score(self, obj):
-        if hasattr(obj, 'correction'):
-            return obj.correction.note
-        return None
 
 class NextDeadlineSerializer(serializers.Serializer):
     exercise_id = serializers.IntegerField()
@@ -265,16 +239,55 @@ class NextDeadlineSerializer(serializers.Serializer):
     deadline_date = serializers.DateTimeField()
     days_left = serializers.IntegerField()
 
-class DashboardStatsSerializer(serializers.Serializer):
-    completed = serializers.IntegerField()
-    total = serializers.IntegerField()
-    average_score = serializers.FloatField()
-    next_deadline = NextDeadlineSerializer(allow_null=True)
+from rest_framework import serializers
+from .models import Soumission, Exercice
+
+class NextDeadlineSerializer(serializers.Serializer):
+    exercise_id = serializers.IntegerField()
+    exercise_title = serializers.CharField()
+    date_limite = serializers.DateTimeField()
+    days_left = serializers.IntegerField()
+
+from rest_framework import serializers
+from .models import Soumission, Exercice
+from django.utils import timezone
+
+class NextDeadlineSerializer(serializers.Serializer):
+    exercise_id = serializers.IntegerField()
+    exercise_title = serializers.CharField()
+    date_limite = serializers.DateTimeField()
+    days_left = serializers.SerializerMethodField()
+
+    def get_days_left(self, obj):
+        return (obj['date_limite'] - timezone.now()).days
+
+class RecentSubmissionSerializer(serializers.ModelSerializer):
+    exercise_title = serializers.CharField(source='exercice.titre')
+    submission_date = serializers.DateTimeField(source='date_soumission')
+    score = serializers.SerializerMethodField()
+    en_retard = serializers.BooleanField()
+    est_plagiat = serializers.BooleanField()
+
+    class Meta:
+        model = Soumission
+        fields = [
+            'id',
+            'exercise_title',
+            'submission_date',
+            'score',
+            'en_retard',
+            'est_plagiat',
+            'nom_original'
+        ]
+
+    def get_score(self, obj):
+        if hasattr(obj, 'correction') and obj.correction:
+            return obj.correction.note
+        return None
 
 class DashboardSerializer(serializers.Serializer):
-    stats = DashboardStatsSerializer()
+    stats = serializers.DictField()
     recent_submissions = RecentSubmissionSerializer(many=True)
-    
 from rest_framework.authtoken.serializers import AuthTokenSerializer
 from rest_framework import serializers
 from .models import Utilisateur

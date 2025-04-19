@@ -206,54 +206,82 @@ class CorrectionViewSet(viewsets.ReadOnlyModelViewSet):
             return Correction.objects.filter(soumission__etudiant=user)
         return Correction.objects.filter(soumission__exercice__professeur=user)
 
-class DashboardView(APIView):    
-    def get(self, request):
-        return student_dashboard_data(request)
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.db.models import Avg
+from django.utils import timezone
+from .models import Soumission, Exercice, PerformanceEtudiant
+from .serializers import DashboardSerializer
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.db.models import Avg
+from django.utils import timezone
+from .models import Soumission, Exercice, PerformanceEtudiant
+from .serializers import DashboardSerializer
+import logging
 
-from .models import (
-    PerformanceEtudiant, 
-    Exercice, 
-    Soumission, 
-    Utilisateur,
-    Correction
-)
-from .serializers import (
-    DashboardSerializer,
-    RecentSubmissionSerializer,
-    NextDeadlineSerializer
-)
-from rest_framework.decorators import permission_classes
+logger = logging.getLogger(__name__)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def student_dashboard_data(request):
     student = request.user
+    student = request.user
+    print(f"\n=== DEBUG USER ===")
+    print(f"User ID: {student.id}, Email: {student.email}")
     
-    # Calcul des statistiques
-    stats = {
-        'completed': Soumission.objects.filter(etudiant=student).count(),
-        'total': Exercice.objects.filter(classe__etudiants=student).count(),
-        'average_score': round(
-            PerformanceEtudiant.objects.filter(etudiant=student)
-            .aggregate(average=Avg('note'))['average'] or 0,
-        1
-        ),
-        'next_deadline': get_next_deadline(student)
-    }
-    
-    # Récupération des soumissions récentes
-    recent_submissions = Soumission.objects.filter(
+    # Debug 1: Vérifiez les soumissions existantes
+    all_subs = Soumission.objects.filter(etudiant=student)
+    print(f"\n=== SOUMISSIONS EXISTANTES ===")
+    print(f"Total: {all_subs.count()}")
+    for sub in all_subs:
+        print(f"ID: {sub.id}, Exercice: {sub.exercice.titre}, Date: {sub.date_soumission}")
+
+    # Debug 2: Vérifiez les exercices
+    exercices = Exercice.objects.filter(classe__etudiants=student)
+    print(f"\n=== EXERCICES ACCESSIBLES ===")
+    print(f"Total: {exercices.count()}")
+    try:
+        # Calcul des statistiques
+        stats = {
+            'completed': Soumission.objects.filter(etudiant=student).count(),
+            'total': Exercice.objects.filter(classe__etudiants=student).count(),
+            'average_score': get_average_score(student),
+            'next_deadline': get_next_deadline(student)
+        }
+        
+        # Récupération des soumissions avec optimisation des requêtes
+        recent_submissions = Soumission.objects.filter(
+            etudiant=student
+        ).select_related(
+            'exercice',
+            'correction'
+        ).order_by('-date_soumission')[:5]
+        
+        # Logs de débogage
+        logger.info(f"Dashboard data requested by {student.email}")
+        logger.debug(f"Found {recent_submissions.count()} submissions")
+        
+        data = {
+            'stats': stats,
+            'recent_submissions': recent_submissions
+        }
+        
+        serializer = DashboardSerializer(data)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        logger.error(f"Error in dashboard view: {str(e)}", exc_info=True)
+        return Response({"error": "Une erreur est survenue"}, status=500)
+
+def get_average_score(student):
+    avg = PerformanceEtudiant.objects.filter(
         etudiant=student
-    ).select_related('exercice', 'correction') \
-     .order_by('-date_soumission')[:5]
-    
-    data = {
-        'stats': stats,
-        'recent_submissions': recent_submissions
-    }
-    
-    serializer = DashboardSerializer(data)
-    return Response(serializer.data)
+    ).aggregate(average=Avg('note'))['average']
+    return round(avg, 1) if avg is not None else 0
 
 def get_next_deadline(student):
     next_ex = Exercice.objects.filter(
@@ -267,50 +295,10 @@ def get_next_deadline(student):
         return {
             'exercise_id': next_ex.id,
             'exercise_title': next_ex.titre,
-            'deadline_date': next_ex.date_limite,
+            'date_limite': next_ex.date_limite,
             'days_left': (next_ex.date_limite - timezone.now()).days
         }
     return None
-
-
-@api_view(['GET'])
-def global_stats(request):
-    stats = {
-        'total': {
-            'exercices': Exercice.objects.count(),
-            'soumissions': Soumission.objects.count(),
-            'etudiants': Utilisateur.objects.filter(role=Utilisateur.ETUDIANT).count(),
-            'professeurs': Utilisateur.objects.filter(role=Utilisateur.PROFESSEUR).count()
-        },
-        'moyennes': {
-            'notes': Correction.objects.aggregate(avg=Avg('note'))['avg'] or 0,
-            'soumissions_par_exercice': Soumission.objects.count() / max(1, Exercice.objects.count())
-        },
-        'recent': {
-            'exercices': ExerciceSerializer(
-                Exercice.objects.order_by('-date_creation')[:5],
-                many=True
-            ).data,
-            'soumissions': SoumissionSerializer(
-                Soumission.objects.select_related('exercice', 'etudiant')
-                                .order_by('-date_soumission')[:5],
-                many=True
-            ).data
-        }
-    }
-    return Response(stats)
-
-from django.db.models import Count
-
-class StatsView(APIView):
-    def get(self, request):
-        # Exemple de statistiques simples
-        stats = {
-            'total_exercices': Exercice.objects.count(),
-            'total_soumissions': Soumission.objects.count(),
-            'exercices_par_classe': Exercice.objects.values('classe__nom').annotate(total=Count('id'))
-        }
-        return Response(stats)
     
 # users/views.py
 from rest_framework_simplejwt.views import TokenObtainPairView

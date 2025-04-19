@@ -85,9 +85,9 @@ WSGI_APPLICATION = 'plateforme_eval.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'projet_sgbd_bis',
+        'NAME': 'projet_sgbd',
         'USER': 'root',  
-        'PASSWORD': '', 
+        'PASSWORD': 'oracle', 
         'HOST': 'localhost',
         'PORT': '3306',
     }

@@ -5,7 +5,7 @@ from . import views
 from gestion.views import CustomTokenObtainPairView
 from .views import process_ai_correction, utilisateur_connecte  # ← Cette ligne est essentielle
 from .views import GoogleSocialAuthView
-
+from .views import student_dashboard_data
 
 router = DefaultRouter()
 router.register(r'utilisateurs', views.UtilisateurViewSet)
