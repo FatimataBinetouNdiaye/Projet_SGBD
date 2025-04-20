@@ -31,6 +31,10 @@ urlpatterns = [
     path('api/correction/<int:soumission_id>/', views.process_ai_correction, name='process_ai_correction'),
     path('api/generate/<int:soumission_id>/', process_ai_correction, name='generate_correction'),
     path('api/generate/', views.generate_without_id, name='generate_no_id'),
+    path('api/dashboard/', views.DashboardView.as_view(), name='dashboard'),
+    path('api/stats/', views.StatsView.as_view(), name='stats'),
+
+
 
 ]
 

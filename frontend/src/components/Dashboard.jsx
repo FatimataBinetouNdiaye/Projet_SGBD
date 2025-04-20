@@ -15,8 +15,7 @@ function Dashboard() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Récupérez le token exactement comme stocké dans le Login
-    const token = localStorage.getItem('token'); // Notez que c'est 'token' et non 'access_token'
+    const token = localStorage.getItem('token');
     const userData = JSON.parse(localStorage.getItem('user'));
 
     if (!token || !userData) {
@@ -58,9 +57,6 @@ function Dashboard() {
     fetchDashboardData();
   }, [navigate]);
 
-
-  // ... (gardez le reste de votre code de rendu tel quel)
-
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -96,33 +92,24 @@ function Dashboard() {
       </header>
 
       <div className="grid md:grid-cols-3 gap-6">
-        {/* Carte: Exercices complétés */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Exercices complétés</h2>
             <CheckCircle className="h-6 w-6 text-green-500" />
           </div>
-          <p className="mt-2 text-3xl font-bold text-gray-900">
-            {dashboardData.stats.completed}
-          </p>
-          <p className="mt-1 text-sm text-gray-600">
-            Sur {dashboardData.stats.total} exercices au total
-          </p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">{dashboardData.stats.completed}</p>
+          <p className="mt-1 text-sm text-gray-600">Sur {dashboardData.stats.total} exercices au total</p>
         </div>
 
-        {/* Carte: Score moyen */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Score moyen</h2>
             <BarChart className="h-6 w-6 text-blue-500" />
           </div>
-          <p className="mt-2 text-3xl font-bold text-gray-900">
-            {dashboardData.stats.average_score.toFixed(1)}/20
-          </p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">{dashboardData.stats.average_score.toFixed(1)}/20</p>
           <p className="mt-1 text-sm text-gray-600">Basé sur toutes les soumissions</p>
         </div>
 
-        {/* Carte: Prochaine échéance */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Prochaine échéance</h2>
@@ -131,14 +118,9 @@ function Dashboard() {
           {dashboardData.stats.next_deadline ? (
             <>
               <p className="mt-2 text-3xl font-bold text-gray-900">
-                {differenceInDays(
-                  new Date(dashboardData.stats.next_deadline.date_limite), 
-                  new Date()
-                )} jours
+                {differenceInDays(new Date(dashboardData.stats.next_deadline.date_limite), new Date())} jours
               </p>
-              <p className="mt-1 text-sm text-gray-600">
-                {dashboardData.stats.next_deadline.exercise_title}
-              </p>
+              <p className="mt-1 text-sm text-gray-600">{dashboardData.stats.next_deadline.exercise_title}</p>
             </>
           ) : (
             <p className="mt-2 text-gray-600">Aucune échéance à venir</p>
@@ -146,39 +128,50 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Section: Soumissions récentes */}
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Soumissions récentes</h2>
         <div className="space-y-4">
           {dashboardData.recent_submissions.length > 0 ? (
             dashboardData.recent_submissions.map((submission, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <h3 className="font-medium text-gray-900">{submission.exercise_title}</h3>
-                  <p className="text-sm text-gray-600">
-                    Soumis le {format(new Date(submission.submission_date), 'dd MMM yyyy', { locale: fr })}
-                  </p>
+              <div key={index} className="p-4 bg-gray-50 rounded-lg shadow-sm space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-gray-900">{submission.exercise_title}</h3>
+                    <p className="text-sm text-gray-600">
+                      Soumis le {format(new Date(submission.submission_date), 'dd MMM yyyy', { locale: fr })}
+                    </p>
+                  </div>
+                  <div className="flex items-center">
+                    {submission.correction?.note !== undefined ? (
+                      <span className={submission.correction.note >= 10 ? "font-semibold text-green-600" : "font-semibold text-red-600"}>
+                        {submission.correction.note}/20
+                      </span>
+                    ) : (
+                      <span className="text-gray-500">En attente</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center">
-                  {submission.score !== null ? (
-                    <span className={`font-semibold ${
-                      submission.score >= 10 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {submission.score}/20
-                    </span>
-                  ) : (
-                    <span className="text-gray-500">En attente</span>
-                  )}
-                </div>
+
+                {submission.correction && (
+                  <div className="mt-2 p-3 border border-gray-200 rounded bg-white text-sm text-gray-700 space-y-1">
+                    <p><strong>Feedback :</strong> {submission.correction.feedback || "Aucun feedback généré."}</p>
+                    <p><strong>Points forts :</strong> {submission.correction.points_forts || "Non précisé"}</p>
+                    <p><strong>Points faibles :</strong> {submission.correction.points_faibles || "Non précisé"}</p>
+
+                    {submission.correction.commentaire_professeur && (
+                      <div className="mt-2 border-t pt-2 text-gray-800">
+                        <p className="font-semibold text-indigo-700">Commentaire du professeur :</p>
+                        <p>{submission.correction.commentaire_professeur}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           ) : (
             <div className="text-center py-8">
               <p className="text-gray-500">Aucune soumission récente</p>
-              <button 
-                onClick={() => window.location.reload()}
-                className="mt-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
-              >
+              <button onClick={() => window.location.reload()} className="mt-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200">
                 Actualiser
               </button>
             </div>
@@ -189,4 +182,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard; 
+export default Dashboard;

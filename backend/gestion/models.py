@@ -1,7 +1,11 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
+
+
+#Début modification par diakhou
+from django.contrib.auth.models import BaseUserManager
 
 class UtilisateurManager(BaseUserManager):
     def create_user(self, email, first_name, last_name, matricule, password=None, **extra_fields):
@@ -25,6 +29,7 @@ class UtilisateurManager(BaseUserManager):
 
         return self.create_user(email, first_name, last_name, matricule, password, **extra_fields)
 
+#fin de la modification par Diakhou
 
 class Utilisateur(AbstractUser):
     """
@@ -42,13 +47,12 @@ class Utilisateur(AbstractUser):
         (ETUDIANT, 'Étudiant'),
         (PROFESSEUR, 'Professeur'),
     ]
-    
+
     # Champs de base
     role = models.CharField(max_length=2, choices=ROLE_CHOICES, verbose_name="Rôle", default=ETUDIANT)
     email = models.EmailField(unique=True, verbose_name="Adresse email")
-    photo_profil = models.ImageField(upload_to='profils/', null=True, blank=True)
+    photo_profil = models.ImageField(upload_to='profils/', null=True, blank=True)  # Un seul champ photo_profil
     date_inscription = models.DateTimeField(auto_now_add=False, default=timezone.now)
-
 
     # Champs pour OAuth
     fournisseur_oauth = models.CharField(max_length=20, blank=True, null=True, 
@@ -68,8 +72,6 @@ class Utilisateur(AbstractUser):
 
     def __str__(self):
         return f"{self.get_full_name()} ({self.get_role_display()})"
-from django.contrib.auth.models import BaseUserManager
-
 
 
 class Classe(models.Model):
@@ -102,74 +104,37 @@ class Classe(models.Model):
     def __str__(self):
         return self.nom
 
-
 class Exercice(models.Model):
     """
-    Modèle représentant un exercice créé par un professeur
+    Exercices créés par les professeurs pour évaluer les étudiants
     """
-    DIFFICULTE_CHOICES = [
-        ('Facile', 'Facile'),
-        ('Moyenne', 'Moyenne'), 
-        ('Difficile', 'Difficile'),
-    ]
+    titre = models.CharField(max_length=200, verbose_name="Titre de l'exercice")
+    description = models.TextField(verbose_name="Description détaillée")
+    consignes = models.TextField(verbose_name="Consignes pour les étudiants")
+    fichier_pdf = models.FileField(upload_to='exercices/', null=True, blank=True)  # <- ce champ doit exister
 
-    # Informations de base
-    titre = models.CharField(
-        max_length=200,
-        verbose_name="Titre de l'exercice"
-    )
-    description = models.TextField(
-        verbose_name="Description détaillée"
-    )
-    consignes = models.TextField(
-        verbose_name="Consignes pour les étudiants"
-    )
-    fichier_pdf = models.FileField(
-        upload_to='exercices/',
-        null=True,
-        blank=True,
-        verbose_name="Fichier PDF"
-    )
-    
-    # Difficulté et pondération
-    difficulte = models.CharField(
-        max_length=10,
-        choices=DIFFICULTE_CHOICES,
-        default='Moyenne',
-        verbose_name="Niveau de difficulté"
-    )
-    ponderation = models.JSONField(
-        default=dict,
-        verbose_name="Pondération des critères"
-    )
-    
     # Relations
-    classe = models.ForeignKey(
-        Classe,
-        on_delete=models.CASCADE,
-        related_name='exercices',
-        verbose_name="Classe concernée"
-    )
-    professeur = models.ForeignKey(
-        Utilisateur,
-        on_delete=models.CASCADE,
-        null=False,  # Champ obligatoire
-        blank=False,
-        editable=False,
-        verbose_name="Professeur créateur"
-    )
-    
-    # Fichiers
+    classe = models.ForeignKey(Classe, on_delete=models.CASCADE, 
+                             related_name='exercices',
+                             verbose_name="Classe concernée")
+
+    professeur = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.CASCADE)
+
+
+    # Fichiers et dates
     fichier_consigne = models.FileField(
         upload_to='exercices/consignes/',
         validators=[FileExtensionValidator(['pdf', 'docx', 'txt'])],
-        null=True,
+        null=True, 
         blank=True,
         verbose_name="Fichier d'énoncé"
     )
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+    date_limite = models.DateTimeField(null=True, blank=True, verbose_name="Date limite de rendu")
+    
+    # Configuration IA
     modele_correction = models.FileField(
         upload_to='modeles_correction/',
-        validators=[FileExtensionValidator(['pdf', 'docx'])],
         null=True,
         blank=True,
         validators=[FileExtensionValidator(allowed_extensions=['pdf', 'docx'])],
@@ -191,41 +156,7 @@ class Exercice(models.Model):
         ordering = ['-date_creation']
     
     def __str__(self):
-        return f"{self.titre} ({self.classe}) - {self.difficulte}"
-    
-    def save(self, *args, **kwargs):
-        """
-        Surcharge de la méthode save pour :
-        - Auto-remplir la pondération
-        - Assigner automatiquement le professeur
-        """
-        # Définition automatique de la pondération
-        if not self.ponderation:
-            self.ponderation = {
-                'Facile': {'score': 20},
-                'Moyenne': {'score': 50},
-                'Difficile': {'score': 80}
-            }.get(self.difficulte, {})
-        
-        # Auto-assigner le professeur si nouveau
-        if not self.pk and not self.professeur_id:
-            from django.contrib.auth import get_user
-            user = get_user(kwargs.get('request', None))
-            if user and user.is_authenticated and user.is_professeur:
-                self.professeur = user
-        
-        super().save(*args, **kwargs)
-    
-    @property
-    def statut(self):
-        """
-        Propriété calculée pour le statut
-        """
-        if not self.est_publie:
-            return "Brouillon"
-        if self.date_limite and timezone.now() > self.date_limite:
-            return "Terminé"
-        return "En cours"
+        return f"{self.titre} ({self.classe})"
 
 class Soumission(models.Model):
     """

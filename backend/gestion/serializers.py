@@ -67,15 +67,29 @@ class ExerciceListSerializer(serializers.ModelSerializer):
 
 from django.core.validators import FileExtensionValidator
 
+# 1. Serializer léger pour Soumission, avec titre de l’exercice
+class SoumissionLightSerializer(serializers.ModelSerializer):
+    exercice_title = serializers.CharField(source='exercice.titre', read_only=True)
+
+    class Meta:
+        model = Soumission
+        fields = ['id', 'date_soumission', 'exercice_title']
+
+
+# 2. CorrectionSerializer : inclut la soumission
 class CorrectionSerializer(serializers.ModelSerializer):
+    soumission = SoumissionLightSerializer(read_only=True)
+
     class Meta:
         model = Correction
-        fields = ['id', 'note', 'feedback', 'points_forts', 'points_faibles']
+        fields = [
+            'id', 'soumission', 'note', 'feedback',
+            'points_forts', 'points_faibles', 'commentaire_professeur'
+        ]
 
-
+# 3. SoumissionSerializer (inchangé sauf qu’il garde CorrectionSerializer)
 class SoumissionSerializer(serializers.ModelSerializer):
     correction = CorrectionSerializer(read_only=True)
-
 
     class Meta:
         model = Soumission
@@ -87,8 +101,6 @@ class SoumissionSerializer(serializers.ModelSerializer):
             'correction'
         ]
         read_only_fields = ('etudiant', 'date_soumission')
-
-
 class ExerciceSerializer(serializers.ModelSerializer):
     soumissions = serializers.SerializerMethodField()
     professeur_nom = serializers.SerializerMethodField()

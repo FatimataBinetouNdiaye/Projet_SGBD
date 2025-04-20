@@ -172,8 +172,13 @@ from .models import Soumission
 from .tasks import process_submission  # Importer la tâche Celery
 
 class SoumissionViewSet(viewsets.ModelViewSet):
+    correction = CorrectionSerializer(read_only=True)  # <-- Ajoute ceci
     queryset = Soumission.objects.all()
     serializer_class = SoumissionSerializer
+    
+    class Meta:
+        model = Soumission
+        fields = '__all__'
 
     def perform_create(self, serializer):
         # Crée la soumission avec les données fournies dans le formulaire
@@ -481,3 +486,19 @@ def generate_without_id(request):
     if not sid:
         return Response({'error':'Il faut passer `soumission_id`'}, status=400)
     return process_ai_correction(request, sid)
+
+class DashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return student_dashboard_data(request)
+    
+    
+class StatsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({
+            "message": "Statistiques générales du système.",
+            "utilisateur": request.user.email
+        })

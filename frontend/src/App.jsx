@@ -1,7 +1,8 @@
 import React, { useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, AuthContext } from './context/AuthContext';
-import Navbar from './components/Navbar';
+import { AuthProvider, AuthContext } from './context/AuthContext'
+import CorrectionPage from './components/CorrectionPage';
+import Navbar from './components/Navbar'; 
 import Accueil from './components/Accueil';
 import Exercices from './components/Exercices';
 import Apropos from './components/Apropos';
@@ -102,6 +103,12 @@ function App() {
               <TeacherDashboard />
             </ProtectedRoute>
           } />
+          <Route path="/corrections" element={
+            <ProtectedRoute requiredRole="ET">
+              <CorrectionPage />
+            </ProtectedRoute>
+          } />
+          
           
           <Route path="*" element={<h1>Page non trouvée</h1>} />
         </Routes>
