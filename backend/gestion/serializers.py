@@ -12,7 +12,7 @@ class UtilisateurSerializer(serializers.ModelSerializer):
     class Meta:
         app_label = 'gestion'
         model = Utilisateur
-        fields = ['id', 'username', 'email', 'password', 'role', 'photo_profil', 'date_inscription', 'matricule']
+        fields = ['id', 'username', 'email', 'password', 'role', 'photo_profil', 'date_inscription', 'matricule','first_name', 'last_name']
         read_only_fields = ['date_inscription']
         extra_kwargs = {
             'password': {'write_only': True},
@@ -49,21 +49,58 @@ class ClasseSerializer(serializers.ModelSerializer):
         read_only_fields = ['date_creation']
 
 
+from rest_framework import serializers
+from django.conf import settings
+
+from rest_framework import serializers
+from django.utils import timezone
+from .models import Exercice
+
 class ExerciceListSerializer(serializers.ModelSerializer):
     classe_nom = serializers.CharField(source='classe.nom', read_only=True)
-    soumissions_count = serializers.IntegerField(source='soumissions.count', read_only=True)
+    professeur_nom = serializers.SerializerMethodField()
+    fichier_pdf_url = serializers.SerializerMethodField()
+    fichier_consigne_url = serializers.SerializerMethodField()
     est_en_retard = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Exercice
         fields = [
-            'id', 'titre', 'description', 'classe', 'classe_nom',
-            'date_limite', 'est_publie', 'soumissions_count', 'est_en_retard'
+            'id', 'titre', 'description', 'consignes', 'classe', 'classe_nom',
+            'professeur', 'professeur_nom', 'date_creation', 'date_limite',
+            'est_publie', 'est_en_retard', 'fichier_pdf_url', 'fichier_consigne_url'
         ]
+
+    def get_professeur_nom(self, obj):
+        return f"{obj.professeur.first_name} {obj.professeur.last_name}" if obj.professeur else None
+
     
+
+    def get_fichier_pdf_url(self, obj):
+        print(f"Debug - Fichier PDF existe: {bool(obj.fichier_pdf)}")  # Vérifiez si le fichier existe
+        if obj.fichier_pdf:
+            try:
+                url = obj.fichier_pdf.url
+                request = self.context.get('request')
+                if request:
+                    full_url = request.build_absolute_uri(url)
+                    print(f"Debug - URL générée: {full_url}")  # Vérifiez l'URL générée
+                    return full_url
+                return url
+            except Exception as e:
+                print(f"Erreur génération URL: {str(e)}")
+        return None  # Explicitement retourner None si pas de fichier
+
+    def get_fichier_consigne_url(self, obj):
+        request = self.context.get('request')
+        if obj.fichier_consigne and request:
+            return request.build_absolute_uri(obj.fichier_consigne.url)
+        return None
+
     def get_est_en_retard(self, obj):
         return obj.date_limite < timezone.now() if obj.date_limite else False
 
+    
 
 from django.core.validators import FileExtensionValidator
 
@@ -101,6 +138,8 @@ class SoumissionSerializer(serializers.ModelSerializer):
             'correction'
         ]
         read_only_fields = ('etudiant', 'date_soumission')
+
+        
 class ExerciceSerializer(serializers.ModelSerializer):
     soumissions = serializers.SerializerMethodField()
     professeur_nom = serializers.SerializerMethodField()
@@ -113,7 +152,7 @@ class ExerciceSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'titre', 'description', 'consignes', 
             'date_creation', 'date_limite', 'est_publie',
-            'professeur', 'professeur_nom', 'classe' , 'classe_nom',
+            'professeur', 'professeur_nom', 'classe' , 'classe_nom', 'difficulte',
             'fichier_pdf', 'modele_correction',
             'soumissions', 'peut_soumettre', 
             'temps_restant', 'est_expire'
@@ -188,19 +227,7 @@ class ExerciceSerializer(serializers.ModelSerializer):
             )
         return value
 
-    def validate(self, data):
-        if 'date_limite' in data and data['date_limite'] < timezone.now():
-            raise serializers.ValidationError({
-                'date_limite': "La date limite est déjà passée"
-            })
-        
-        if self.instance and self.instance.est_publie:
-            if 'date_limite' in data and data['date_limite'] != self.instance.date_limite:
-                raise serializers.ValidationError({
-                    'date_limite': "Impossible de modifier la date limite après publication"
-                })
-        
-        return data
+    
 
 class SoumissionMiniSerializer(serializers.ModelSerializer):
     etudiant_nom = serializers.CharField(source='etudiant.get_full_name')
@@ -276,7 +303,7 @@ class NextDeadlineSerializer(serializers.Serializer):
 class RecentSubmissionSerializer(serializers.ModelSerializer):
     exercise_title = serializers.CharField(source='exercice.titre')
     submission_date = serializers.DateTimeField(source='date_soumission')
-    score = serializers.SerializerMethodField()
+    correction = serializers.SerializerMethodField()  # Ajout de ce champ
     en_retard = serializers.BooleanField()
     est_plagiat = serializers.BooleanField()
 
@@ -286,20 +313,30 @@ class RecentSubmissionSerializer(serializers.ModelSerializer):
             'id',
             'exercise_title',
             'submission_date',
-            'score',
+            'correction',  # Ajouté
             'en_retard',
             'est_plagiat',
             'nom_original'
         ]
 
-    def get_score(self, obj):
+    def get_correction(self, obj):
         if hasattr(obj, 'correction') and obj.correction:
-            return obj.correction.note
+            return {
+                'note': obj.correction.note,
+                'feedback': obj.correction.feedback,
+                'points_forts': obj.correction.points_forts,
+                'points_faibles': obj.correction.points_faibles,
+                'commentaire_professeur': obj.correction.commentaire_professeur,
+                'est_validee': obj.correction.est_validee
+            }
         return None
 
 class DashboardSerializer(serializers.Serializer):
     stats = serializers.DictField()
     recent_submissions = RecentSubmissionSerializer(many=True)
+
+
+
 from rest_framework.authtoken.serializers import AuthTokenSerializer
 from rest_framework import serializers
 from .models import Utilisateur
@@ -361,3 +398,79 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token = super().get_token(user)
         token['role'] = user.role  
         return token
+    
+
+
+from rest_framework import serializers
+
+
+class StudentSerializer(serializers.ModelSerializer):
+    classes = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Utilisateur
+        fields = [
+            'id',
+            'matricule',
+            'last_name',
+            'first_name',
+            'email',
+            'classes',
+            'date_inscription'
+        ]
+    
+    def get_classes(self, obj):
+        return list(obj.classes.values_list('nom', flat=True))    
+    
+
+
+# serializers.py
+class TeacherSubmissionSerializer(serializers.ModelSerializer):
+    etudiant_nom = serializers.SerializerMethodField()
+    etudiant_prenom = serializers.SerializerMethodField()
+    exercice_titre = serializers.SerializerMethodField()
+    classe_nom = serializers.SerializerMethodField()
+    correction = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Soumission
+        fields = [
+            'id',
+            'etudiant_nom',
+            'etudiant_prenom',
+            'exercice_titre',
+            'classe_nom',
+            'date_soumission',
+            'correction',
+            'nom_original',
+            'en_retard',
+            'est_plagiat'
+        ]
+
+    def get_etudiant_nom(self, obj):
+        return obj.etudiant.last_name if obj.etudiant else ''
+
+    def get_etudiant_prenom(self, obj):
+        return obj.etudiant.first_name if obj.etudiant else ''
+
+    def get_exercice_titre(self, obj):
+        return obj.exercice.titre if obj.exercice else ''
+
+    def get_classe_nom(self, obj):
+        return obj.exercice.classe.nom if obj.exercice and obj.exercice.classe else ''
+
+    def get_correction(self, obj):
+        if not hasattr(obj, 'correction') or not obj.correction:
+            return None
+            
+        return {
+            'id': obj.correction.id,
+            'note': obj.correction.note,
+            'note_ia': getattr(obj.correction, 'note_ia', None),
+            'feedback': obj.correction.feedback,
+            'points_forts': obj.correction.points_forts,
+            'points_faibles': obj.correction.points_faibles,
+            'commentaire_professeur': obj.correction.commentaire_professeur,
+            'est_validee': obj.correction.est_validee,
+            'date_validation': obj.correction.date_validation
+        }

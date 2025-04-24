@@ -6,6 +6,8 @@ from gestion.views import CustomTokenObtainPairView
 from .views import process_ai_correction, utilisateur_connecte  # ← Cette ligne est essentielle
 from .views import GoogleSocialAuthView
 from .views import student_dashboard_data
+from .views import ExerciceListView,  professor_classes_list, student_submissions, get_submission_pdf,CurrentProfessorView
+
 
 router = DefaultRouter()
 router.register(r'utilisateurs', views.UtilisateurViewSet)
@@ -33,7 +35,19 @@ urlpatterns = [
     path('api/generate/', views.generate_without_id, name='generate_no_id'),
     path('api/dashboard/', views.DashboardView.as_view(), name='dashboard'),
     path('api/stats/', views.StatsView.as_view(), name='stats'),
-
+    path('api/exercices/list/', ExerciceListView.as_view(), name='exercice-list'),
+    path('api/professor/classes/', professor_classes_list, name='professor-classes-list'),
+    path('api/professor/students/<int:student_id>/submissions/', student_submissions, name='student-submissions'),
+    path('api/professor/students/<int:student_id>/submissions/', views.student_submissions),
+    path('api/soumissions/<int:soumission_id>/pdf/', views.soumission_pdf),
+    path('api/teacher/submissions/', views.teacher_submissions, name='teacher-submissions'),
+    path('api/corrections/<int:submission_id>/', views.update_correction, name='update-correction'),
+    path('api/submissions/<int:submission_id>/pdf/', get_submission_pdf, name='get_submission_pdf'),
+    path('api/corrections/<int:soumission_id>/update/', views.update_correction, name='update_correction'),
+     path('api/corrections/<int:soumission_id>/update/', views.update_correction, name='update_correction'),
+    path('api/soumissions/<int:submission_id>/pdf/', get_submission_pdf, name='get_submission_pdf'),
+    path('api/professor/class/evolution/', views.evolution_classe, name='evolution_classe'),
+    path('api/professors/me/', CurrentProfessorView.as_view(), name='current-professor'),
 
 
 ]

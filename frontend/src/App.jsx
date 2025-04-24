@@ -14,6 +14,8 @@ import SubmissionForm from './components/SubmissionForm';
 import Dashboard from './components/Dashboard';
 import TeacherDashboard from './components/TeacherDashboard';
 import LoadingSpinner from './components/LoadingSpinner';
+import ProfessorStudentList from './components/ProfessorStudentList';
+import StudentSubmissions from './components/StudentSubmissions';
 import './App.css';
 
 // Composant de protection de route
@@ -108,6 +110,22 @@ function App() {
               <CorrectionPage />
             </ProtectedRoute>
           } />
+                      <Route 
+              path="/liste-classes" 
+              element={
+                <ProtectedRoute allowedRoles={['PR']}>
+                  <ProfessorStudentList />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+    path="/soumissions/etudiant/:studentId" 
+    element={
+        <ProtectedRoute allowedRoles={['PR']}>
+            <StudentSubmissions />
+        </ProtectedRoute>
+    } 
+/>
           
           
           <Route path="*" element={<h1>Page non trouvée</h1>} />

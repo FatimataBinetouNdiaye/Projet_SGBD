@@ -241,26 +241,7 @@ function Login() {
               )}
             </div>
 
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium" style={{ color: colors.darkText }}>
-                Type de compte
-              </label>
-              <select
-                id="role"
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="mt-1 block w-full pl-3 pr-10 py-3 text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm"
-                style={{
-                  borderColor: colors.brandPrimaryLighter,
-                  focusBorderColor: colors.brandPrimary,
-                  focusRingColor: colors.brandPrimaryLight
-                }}
-              >
-                <option value="ET">Étudiant</option>
-                <option value="PR">Professeur</option>
-              </select>
-            </div>
+            
           </div>
 
           <div className="flex items-center justify-between">

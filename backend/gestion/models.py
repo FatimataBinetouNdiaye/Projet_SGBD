@@ -2,6 +2,9 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
+import fitz  # PyMuPDF
+from django.core.validators import FileExtensionValidator, MinValueValidator, MaxValueValidator
+
 
 
 #Début modification par diakhou
@@ -87,6 +90,13 @@ class Classe(models.Model):
                                  limit_choices_to={'role': Utilisateur.PROFESSEUR},
                                  related_name='classes_enseignees',
                                  verbose_name="Professeur responsable")
+    professeurs_supplementaires = models.ManyToManyField(
+        Utilisateur,
+        related_name='classes_enseignees_supplementaires',
+        limit_choices_to={'role': Utilisateur.PROFESSEUR},
+        blank=True,
+        verbose_name="Professeurs supplémentaires"
+    )
     etudiants = models.ManyToManyField(Utilisateur, 
                                       limit_choices_to={'role': Utilisateur.ETUDIANT},
                                       related_name='classes',
@@ -108,10 +118,21 @@ class Exercice(models.Model):
     """
     Exercices créés par les professeurs pour évaluer les étudiants
     """
+    DIFFICULTE_CHOICES = [
+        ('Facile', 'Facile'),
+        ('Moyenne', 'Moyenne'),
+        ('Difficile', 'Difficile'),
+    ]
     titre = models.CharField(max_length=200, verbose_name="Titre de l'exercice")
     description = models.TextField(verbose_name="Description détaillée")
     consignes = models.TextField(verbose_name="Consignes pour les étudiants")
-    fichier_pdf = models.FileField(upload_to='exercices/', null=True, blank=True)  # <- ce champ doit exister
+    fichier_pdf = models.FileField(
+        upload_to='exercices/',
+        null=False,  # Rendre obligatoire
+        blank=False,
+        verbose_name="Fichier PDF",
+        validators=[FileExtensionValidator(['pdf'])]  # Uniquement PDF
+    )  # <- ce champ doit exister
 
     # Relations
     classe = models.ForeignKey(Classe, on_delete=models.CASCADE, 
@@ -150,6 +171,17 @@ class Exercice(models.Model):
     # Statut
     est_publie = models.BooleanField(default=False, verbose_name="Publié aux étudiants")
     
+    coefficient = models.FloatField(
+        default=1.0,
+        verbose_name="Coefficient",
+        validators=[MinValueValidator(0.1), MaxValueValidator(5.0)]
+    )
+    difficulte = models.CharField(
+        max_length=10,
+        choices=DIFFICULTE_CHOICES,
+        default='Moyenne',
+        verbose_name="Niveau de difficulté"
+    )
     class Meta:
         verbose_name = "Exercice"
         verbose_name_plural = "Exercices"
@@ -215,7 +247,21 @@ class Soumission(models.Model):
             self.nom_original = self.fichier_pdf.name
             self.taille_fichier = self.fichier_pdf.size
         super().save(*args, **kwargs)
-        
+    def extraire_texte_pdf(self):
+        if not self.fichier_pdf:
+            return ""
+
+        try:
+            chemin = self.fichier_pdf.path  # Chemin local du PDF
+            doc = fitz.open(chemin)
+            texte = ""
+            for page in doc:
+                texte += page.get_text()
+            doc.close()
+            return texte.strip()
+        except Exception as e:
+            print(f"❌ Erreur lors de l’extraction du texte PDF : {e}")
+            return ""    
 class Correction(models.Model):
     """
     Corrections générées par l'IA et potentiellement modifiées par les professeurs

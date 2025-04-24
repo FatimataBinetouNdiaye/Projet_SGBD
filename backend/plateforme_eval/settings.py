@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     'corsheaders',  # Ajout de CORS pour autoriser React
     'rest_framework_simplejwt',
     'rest_framework.authtoken',  # <-- Ajoutez cette ligne
-
+    'django_celery_results',
 ]
 
 MIDDLEWARE = [
@@ -85,9 +85,9 @@ WSGI_APPLICATION = 'plateforme_eval.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'projet_sgbd_bis',
+        'NAME': 'projet_sgbd',
         'USER': 'root',  
-        'PASSWORD': '', 
+        'PASSWORD': 'oracle', 
         'HOST': 'localhost',
         'PORT': '3306',
     }
@@ -160,12 +160,13 @@ REST_FRAMEWORK = {
 CORS_ALLOW_ALL_ORIGINS = True  # Autorise toutes les requêtes (pour le développement)
 
 # Paramètres Celery
-CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Ou l'URL de votre broker
-CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'UTC'
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'django-db'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 300  # 5 minutes
+CELERY_TASK_SOFT_TIME_LIMIT = 270  # 4.5 minutes
+CELERY_WORKER_SEND_TASK_EVENTS = True
+CELERY_TASK_SEND_SENT_EVENT = True
 from datetime import timedelta  # Ajoutez cette ligne en haut du fichier
 
 SIMPLE_JWT = {
@@ -179,7 +180,7 @@ OLLAMA_GENERATE_PATH = "/api/generate"  # ou "/v1/chat/completions"
 # …
 DEEPEEK_API_URL = f"{OLLAMA_API_URL}{OLLAMA_GENERATE_PATH}"
 
-OLLAMA_MODELS =  Path(r"C:\Users\hp\.ollama\models")
+OLLAMA_MODELS =  Path(r"C:\Users\HP\.ollama\models")
 
 #DEEPSEEK_API_KEY = 'sk-8fc9673f5b6c45f6ac3a42b75fca5caa'  # Remplace par ta clé API DeepSeek
 

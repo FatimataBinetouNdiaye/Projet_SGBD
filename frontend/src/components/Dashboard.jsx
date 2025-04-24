@@ -4,8 +4,38 @@ import axios from 'axios';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler 
+} from 'chart.js';
+
+// Enregistrez les composants nécessaires de Chart.js
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 function Dashboard() {
+  const colors = {
+    brandPrimary: '#4CAF4F',
+    brandPrimaryLight: '#81C784',
+    brandPrimaryLighter: '#C8E6C9',
+    brandPrimaryDark: '#388E3C',
+  };
   const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState({
     stats: { completed: 0, total: 0, average_score: 0, next_deadline: null },
@@ -64,6 +94,89 @@ function Dashboard() {
       </div>
     );
   }
+   // Préparer les données pour le graphique avec les noms d'exercices
+  const prepareChartData = () => {
+    const filteredSubmissions = dashboardData.recent_submissions
+      .filter(sub => sub.correction?.note !== undefined)
+      .sort((a, b) => new Date(a.submission_date) - new Date(b.submission_date));
+
+    // Raccourcir les noms d'exercices si trop longs
+    const labels = filteredSubmissions.map(sub => {
+      const maxLength = 15;
+      return sub.exercise_title.length > maxLength 
+        ? sub.exercise_title.substring(0, maxLength) + '...' 
+        : sub.exercise_title;
+    });
+    
+    const data = filteredSubmissions.map(sub => sub.correction.note);
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Notes',
+          data: data,
+          borderColor: colors.brandPrimaryDark, // Utilisation du vert foncé pour la ligne
+          backgroundColor: colors.brandPrimaryLighter, // Utilisation du vert très clair pour le fond
+          tension: 0.3,
+          pointBackgroundColor: colors.brandPrimary,
+          pointBorderColor: '#fff',
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          borderWidth: 2,
+          fill: true // Remplissage sous la courbe
+        }
+      ]
+    };
+  };
+
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+      title: {
+        display: true,
+        text: 'Notes par exercice',
+      },
+      tooltip: {
+        callbacks: {
+          title: (context) => {
+            const fullTitle = dashboardData.recent_submissions
+              .filter(sub => sub.correction?.note !== undefined)
+              .sort((a, b) => new Date(a.submission_date) - new Date(b.submission_date))[context[0].dataIndex].exercise_title;
+            return fullTitle;
+          },
+          label: (context) => {
+            const submission = dashboardData.recent_submissions
+              .filter(sub => sub.correction?.note !== undefined)
+              .sort((a, b) => new Date(a.submission_date) - new Date(b.submission_date))[context.dataIndex];
+            return [
+              `Note: ${context.raw}/20`,
+              `Soumis le: ${format(new Date(submission.submission_date), 'dd MMM yyyy', { locale: fr })}`
+            ];
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        min: 0,
+        max: 20,
+        ticks: {
+          stepSize: 2
+        }
+      },
+      x: {
+        ticks: {
+          autoSkip: false,
+          maxRotation: 45,
+          minRotation: 45
+        }
+      }
+    },
+  };
 
   if (error) {
     return (
@@ -104,7 +217,7 @@ function Dashboard() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Score moyen</h2>
-            <BarChart className="h-6 w-6 text-blue-500" />
+            <BarChart className="h-6 w-6 text-green-500" />
           </div>
           <p className="mt-2 text-3xl font-bold text-gray-900">{dashboardData.stats.average_score.toFixed(1)}/20</p>
           <p className="mt-1 text-sm text-gray-600">Basé sur toutes les soumissions</p>
@@ -113,7 +226,7 @@ function Dashboard() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Prochaine échéance</h2>
-            <Clock className="h-6 w-6 text-orange-500" />
+            <Clock className="h-6 w-6 text-green-500" />
           </div>
           {dashboardData.stats.next_deadline ? (
             <>
@@ -126,6 +239,23 @@ function Dashboard() {
             <p className="mt-2 text-gray-600">Aucune échéance à venir</p>
           )}
         </div>
+      </div>
+     
+
+      {/* Ajoutez cette nouvelle section pour le graphique */}
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Progression académique</h2>
+        {dashboardData.recent_submissions.filter(sub => sub.correction?.note !== undefined).length > 1 ? (
+          <div className="h-80"> {/* Taille fixe pour le conteneur du graphique */}
+            <Line data={prepareChartData()} options={chartOptions} />
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            {dashboardData.recent_submissions.length === 0 
+              ? "Aucune soumission disponible" 
+              : "Pas assez de données pour afficher la progression (minimum 2 notes requises)"}
+          </div>
+        )}
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow-md">
@@ -160,7 +290,7 @@ function Dashboard() {
 
                     {submission.correction.commentaire_professeur && (
                       <div className="mt-2 border-t pt-2 text-gray-800">
-                        <p className="font-semibold text-indigo-700">Commentaire du professeur :</p>
+                        <p className="font-semibold text-green-700">Commentaire du professeur :</p>
                         <p>{submission.correction.commentaire_professeur}</p>
                       </div>
                     )}

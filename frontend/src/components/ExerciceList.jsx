@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Clock, ArrowRight, Search } from 'lucide-react';
+import { FileText, Clock, ArrowRight, Search, X, Download, Eye } from 'lucide-react';
 import axios from 'axios';
+import { Viewer, Worker } from '@react-pdf-viewer/core';
+import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
+import '@react-pdf-viewer/core/lib/styles/index.css';
+import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 
 const ExerciceList = () => {
   const [exercises, setExercises] = useState([]);
@@ -9,29 +13,36 @@ const ExerciceList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const exercisesPerPage = 5;
   const [error, setError] = useState('');
-
+  const [selectedExercise, setSelectedExercise] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
   useEffect(() => {
-    const token = localStorage.getItem("token"); // 🔑 Corrigé ici : "token" et non "access_token"
-    console.log("Token récupéré:", token);
+    const fetchExercises = async () => {
+      setIsLoading(true);
+      const token = localStorage.getItem("token");
+      
+      if (!token) {
+        setError("Aucun token trouvé. Veuillez vous reconnecter.");
+        setIsLoading(false);
+        return;
+      }
 
-    if (!token) {
-      setError("Aucun token trouvé. Veuillez vous reconnecter.");
-      return;
-    }
-
-    axios
-      .get("http://127.0.0.1:8000/api/exercices/", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      .then((response) => {
+      try {
+        const response = await axios.get("http://127.0.0.1:8000/api/exercices/", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
         setExercises(response.data);
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error("Erreur lors de la récupération des exercices :", error);
         setError("Erreur lors du chargement des exercices.");
-      });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchExercises();
   }, []);
 
   const getDifficulty = (ponderation) => {
@@ -39,7 +50,7 @@ const ExerciceList = () => {
     
     if (typeof ponderation === 'object' && Object.keys(ponderation).length > 0) {
       const total = Object.values(ponderation).reduce((sum, val) => sum + parseInt(val || 0), 0);
-      return computeLevel(total / Object.keys(ponderation).length); // moyenne
+      return computeLevel(total / Object.keys(ponderation).length);
     }
   
     return 'Inconnue';
@@ -51,8 +62,6 @@ const ExerciceList = () => {
     if (p < 70) return 'Medium';
     return 'Hard';
   };
-  
-  
 
   const filteredExercises = exercises.filter((exercise) => {
     const matchesSearch =
@@ -68,8 +77,38 @@ const ExerciceList = () => {
   const currentExercises = filteredExercises.slice(indexOfFirstExercise, indexOfLastExercise);
   const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
+  const handleViewPdf = (exercise) => {
+    console.log('Données complètes:', exercise);
+    
+    // Utilisez exercise.fichier_pdf au lieu de exercise.fichier_pdf_url
+    const pdfUrl = exercise.fichier_pdf;
+  
+    if (!pdfUrl) {
+      console.error('PDF URL manquante dans:', exercise);
+      setError("Le PDF n'est pas disponible.");
+      return;
+    }
+  
+    // Ouvrir dans un nouvel onglet
+    window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const closePdfViewer = () => {
+    setSelectedExercise(null);
+  };
+
+  const downloadPdf = (pdfUrl) => {
+    const link = document.createElement('a');
+    link.href = pdfUrl;
+    link.target = '_blank';
+    link.download = `exercice_${selectedExercise?.id || 'unknown'}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
-    <div className="space-y-8 p-6 mt-16">
+    <div className="space-y-8 p-6 mt-16 relative">
       <header className="text-center">
         <h1 className="text-3xl font-bold text-gray-900">Exercices Disponibles</h1>
         <p className="mt-2 text-gray-600">
@@ -77,10 +116,15 @@ const ExerciceList = () => {
         </p>
       </header>
 
-      {/* Affichage erreur */}
       {error && (
         <div className="bg-red-100 text-red-700 p-4 rounded">
           {error}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="text-center py-8">
+          <p>Chargement des exercices...</p>
         </div>
       )}
 
@@ -146,9 +190,12 @@ const ExerciceList = () => {
                     </div>
                   </div>
                 </div>
-                <button className="flex items-center text-blue-600 hover:text-blue-700">
-                  <span className="mr-1">Commencer</span>
-                  <ArrowRight className="h-4 w-4" />
+                <button 
+                  className="flex items-center text-blue-600 hover:text-blue-700"
+                  onClick={() => handleViewPdf(exercise)}
+                >
+                  <Eye className="h-4 w-4 mr-1" />
+                  <span>Voir PDF</span>
                 </button>
               </div>
             </div>
@@ -156,7 +203,12 @@ const ExerciceList = () => {
         })}
       </div>
 
-      {/* Pagination */}
+      {filteredExercises.length === 0 && !isLoading && (
+        <div className="text-center py-10">
+          <p>Aucun exercice trouvé avec ces critères.</p>
+        </div>
+      )}
+
       <div className="flex justify-center space-x-2">
         {Array.from({ length: Math.ceil(filteredExercises.length / exercisesPerPage) }, (_, i) => (
           <button

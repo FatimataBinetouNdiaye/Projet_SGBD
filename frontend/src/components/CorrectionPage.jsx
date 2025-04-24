@@ -51,10 +51,7 @@ const CorrectionPage = () => {
         </div>
       )}
 
-      {/* Affichage brut JSON pour debug */}
-      <pre className="bg-gray-100 text-sm p-4 rounded overflow-auto">
-        {JSON.stringify(corrections, null, 2)}
-      </pre>
+     
 
       <div className="grid gap-6">
         {corrections.map((correction) => (

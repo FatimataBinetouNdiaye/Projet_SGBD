@@ -15,7 +15,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Avg
 from .models import *
-from .serializers import UtilisateurSerializer, ClasseSerializer, ExerciceSerializer, SoumissionSerializer, CorrectionSerializer
+from .serializers import UtilisateurSerializer, ClasseSerializer, ExerciceSerializer, SoumissionSerializer, CorrectionSerializer, ExerciceListSerializer, RecentSubmissionSerializer, TeacherSubmissionSerializer
 from rest_framework.permissions import AllowAny  # <-- Ajoutez cette importation
 
 
@@ -34,6 +34,37 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
+
+class ExerciceListView(generics.ListAPIView):
+    """
+    Vue spécialisée uniquement pour lister les exercices
+    avec les URLs des fichiers correctement formatées
+    """
+    serializer_class = ExerciceListSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Exercice.objects.select_related('professeur', 'classe')
+        
+        if user.role == Utilisateur.PROFESSEUR:
+            return queryset.filter(professeur=user)
+        return queryset.filter(
+            est_publie=True,
+            date_limite__gte=timezone.now()
+        ).order_by('-date_creation')
+    
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['absolute_uri'] = self.request.build_absolute_uri('/')
+        return context
+    
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        print("Données renvoyées:", response.data)  # Vérifiez les URLs dans la réponse
+        return response
 
 class ExerciceViewSet(viewsets.ModelViewSet):
     """
@@ -45,7 +76,7 @@ class ExerciceViewSet(viewsets.ModelViewSet):
     serializer_class = ExerciceSerializer
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'post', 'patch', 'delete']  # Désactive PUT
-
+    
     def get_queryset(self):
         user = self.request.user
         now = timezone.now()
@@ -155,6 +186,20 @@ class ExerciceViewSet(viewsets.ModelViewSet):
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+    
+    def perform_update(self, serializer):
+        """
+        Effectuer la mise à jour de l'exercice.
+        Nous vérifions si l'exercice est déjà publié. Si c'est le cas,
+        on permet la modification de la date limite (ou non, selon ta logique).
+        """
+
+        serializer.save()
+
 
 from rest_framework import viewsets, status
 from rest_framework.response import Response
@@ -172,14 +217,10 @@ from .models import Soumission
 from .tasks import process_submission  # Importer la tâche Celery
 
 class SoumissionViewSet(viewsets.ModelViewSet):
-    correction = CorrectionSerializer(read_only=True)  # <-- Ajoute ceci
     queryset = Soumission.objects.all()
     serializer_class = SoumissionSerializer
     
-    class Meta:
-        model = Soumission
-        fields = '__all__'
-
+    
     def perform_create(self, serializer):
         # Crée la soumission avec les données fournies dans le formulaire
         soumission = serializer.save(
@@ -230,79 +271,127 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from django.db.models import Avg, F
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .models import Soumission, Exercice
+from django.utils import timezone
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.utils import timezone
+from django.db.models import Avg, Sum, F, Count
+from .models import Soumission, Exercice, PerformanceEtudiant
+from .serializers import RecentSubmissionSerializer
+import logging
+
+logger = logging.getLogger(__name__)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def student_dashboard_data(request):
-    student = request.user
-    student = request.user
-    print(f"\n=== DEBUG USER ===")
-    print(f"User ID: {student.id}, Email: {student.email}")
-    
-    # Debug 1: Vérifiez les soumissions existantes
-    all_subs = Soumission.objects.filter(etudiant=student)
-    print(f"\n=== SOUMISSIONS EXISTANTES ===")
-    print(f"Total: {all_subs.count()}")
-    for sub in all_subs:
-        print(f"ID: {sub.id}, Exercice: {sub.exercice.titre}, Date: {sub.date_soumission}")
-
-    # Debug 2: Vérifiez les exercices
-    exercices = Exercice.objects.filter(classe__etudiants=student)
-    print(f"\n=== EXERCICES ACCESSIBLES ===")
-    print(f"Total: {exercices.count()}")
     try:
-        # Calcul des statistiques
-        stats = {
-            'completed': Soumission.objects.filter(etudiant=student).count(),
-            'total': Exercice.objects.filter(classe__etudiants=student).count(),
-            'average_score': get_average_score(student),
-            'next_deadline': get_next_deadline(student)
-        }
+        student = request.user
         
-        # Récupération des soumissions avec optimisation des requêtes
-        recent_submissions = Soumission.objects.filter(
+        # 1. Récupération de toutes les soumissions avec correction
+        all_submissions = Soumission.objects.filter(
             etudiant=student
-        ).select_related(
-            'exercice',
-            'correction'
-        ).order_by('-date_soumission')[:5]
+        ).select_related('exercice', 'correction').prefetch_related('exercice__classe')
         
-        # Logs de débogage
-        logger.info(f"Dashboard data requested by {student.email}")
-        logger.debug(f"Found {recent_submissions.count()} submissions")
+        # 2. Récupération des exercices disponibles
+        all_exercises = Exercice.objects.filter(classe__etudiants=student)
+        total_exercises = all_exercises.count()
         
-        data = {
-            'stats': stats,
-            'recent_submissions': recent_submissions
+        # 3. Calcul des statistiques
+        completed_count = all_submissions.filter(correction__isnull=False).count()
+        
+        # 4. Calcul de la moyenne
+        average_score = calculate_weighted_average(student)
+        
+        # 5. Prochaine échéance améliorée
+        next_deadline = get_next_deadline(student, all_exercises)
+        
+        # 6. Préparation des données
+        stats = {
+            'completed': completed_count,
+            'total': total_exercises,
+            'average_score': average_score,
+            'next_deadline': next_deadline,
+            'unsubmitted_count': total_exercises - all_submissions.count(),
+            'late_submissions': all_submissions.filter(en_retard=True).count()
         }
         
-        serializer = DashboardSerializer(data)
-        return Response(serializer.data)
+        return Response({
+            'stats': stats,
+            'recent_submissions': RecentSubmissionSerializer(
+                all_submissions.order_by('-date_soumission')[:5],
+                many=True
+            ).data
+        })
         
     except Exception as e:
-        logger.error(f"Error in dashboard view: {str(e)}", exc_info=True)
-        return Response({"error": "Une erreur est survenue"}, status=500)
+        logger.error(f"Dashboard error: {str(e)}", exc_info=True)
+        return Response({'error': 'Une erreur est survenue'}, status=500)
 
-def get_average_score(student):
-    avg = PerformanceEtudiant.objects.filter(
-        etudiant=student
-    ).aggregate(average=Avg('note'))['average']
-    return round(avg, 1) if avg is not None else 0
-
-def get_next_deadline(student):
-    next_ex = Exercice.objects.filter(
-        classe__etudiants=student,
-        date_limite__gt=timezone.now()
-    ).exclude(
-        pk__in=Soumission.objects.filter(etudiant=student).values('exercice')
-    ).order_by('date_limite').first()
+def calculate_weighted_average(student):
+    """Calcule la moyenne pondérée par les coefficients"""
+    result = Soumission.objects.filter(
+        etudiant=student,
+        correction__isnull=False
+    ).annotate(
+        weighted_score=F('correction__note') * F('exercice__coefficient')
+    ).aggregate(
+        total_score=Sum('weighted_score'),
+        total_coefficient=Sum('exercice__coefficient')
+    )
     
-    if next_ex:
+    if result['total_coefficient'] and result['total_score']:
+        return round(result['total_score'] / result['total_coefficient'], 2)
+    return 0.0
+
+def get_next_deadline(student, all_exercises):
+    """Récupère la prochaine échéance avec plus de détails"""
+    submitted_exercises = Soumission.objects.filter(
+        etudiant=student
+    ).values_list('exercice_id', flat=True)
+
+    # Exercices non soumis triés par date
+    unsibmitted_exercises = all_exercises.exclude(
+        id__in=submitted_exercises
+    ).order_by('date_limite')
+
+    now = timezone.now()
+    
+    # Prochain deadline futur
+    next_future = unsibmitted_exercises.filter(
+        date_limite__gt=now
+    ).first()
+
+    if next_future:
         return {
-            'exercise_id': next_ex.id,
-            'exercise_title': next_ex.titre,
-            'date_limite': next_ex.date_limite,
-            'days_left': (next_ex.date_limite - timezone.now()).days
+            'exercise_id': next_future.id,
+            'exercise_title': next_future.titre,
+            'date_limite': next_future.date_limite,
+            'is_past_due': False,
+            'days_remaining': (next_future.date_limite - now).days
         }
+    
+    # Sinon, premier exercice en retard
+    first_past_due = unsibmitted_exercises.filter(
+        date_limite__lte=now
+    ).first()
+
+    if first_past_due:
+        return {
+            'exercise_id': first_past_due.id,
+            'exercise_title': first_past_due.titre,
+            'date_limite': first_past_due.date_limite,
+            'is_past_due': True,
+            'days_late': (now - first_past_due.date_limite).days
+        }
+    
     return None
     
 # users/views.py
@@ -421,7 +510,7 @@ def process_ai_correction(request, soumission_id):
         feedback=correction['feedback'],
         points_forts=correction['points_forts'],
         points_faibles=correction['points_faibles'],
-        modele_ia_utilise='DeepSeek',  # S'assurer d'utiliser le modèle correct
+        modele_ia_utilise='deepseek-coder:6.7b',  # S'assurer d'utiliser le modèle correct
     )
 
     return Response({"message": "Correction effectuée par l'IA"}, status=status.HTTP_200_OK)
@@ -502,3 +591,280 @@ class StatsView(APIView):
             "message": "Statistiques générales du système.",
             "utilisateur": request.user.email
         })
+    
+from django.db.models import Q
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def professor_classes_list(request):
+    if request.user.role != 'PR':
+        return Response({"error": "Accès réservé aux professeurs"}, status=403)
+    
+    try:
+        classes = Classe.objects.filter(
+            Q(professeur=request.user) | 
+            Q(professeurs_supplementaires=request.user)
+        ).distinct().prefetch_related(
+            Prefetch('etudiants', 
+                   queryset=Utilisateur.objects.filter(role='ET')
+                   .only('id', 'first_name', 'last_name', 'email', 'matricule'))
+        )
+        
+        classes_data = []
+        for classe in classes:
+            etudiants = classe.etudiants.all()
+            classes_data.append({
+                'id': classe.id,
+                'nom': classe.nom,
+                'code': classe.code,
+                'etudiants_count': etudiants.count(),
+                'etudiants': [
+                    {
+                        'id': etudiant.id,
+                        'matricule': etudiant.matricule,
+                        'prenom': etudiant.first_name,
+                        'nom': etudiant.last_name,
+                        'email': etudiant.email,
+                        'soumissions_count': etudiant.soumissions.count()  # Nouveau champ
+                    }
+                    for etudiant in etudiants
+                ]
+            })
+        
+        return Response(classes_data)
+    
+    except Exception as e:
+        logger.error(f"Error: {str(e)}")
+        return Response({"error": str(e)}, status=500)
+    
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def student_submissions(request, student_id):
+    if request.user.role != 'PR':
+        return Response({"error": "Accès réservé aux professeurs"}, status=403)
+    
+    try:
+        soumissions = Soumission.objects.filter(
+            etudiant_id=student_id
+        ).select_related('exercice', 'correction').order_by('-date_soumission')
+        
+        submissions_data = []
+        for soumission in soumissions:
+            submissions_data.append({
+                'id': soumission.id,
+                'exercice': soumission.exercice.titre,
+                'date_soumission': soumission.date_soumission,
+                'note': soumission.correction.note if hasattr(soumission, 'correction') else None,
+                'statut': 'Corrigé' if hasattr(soumission, 'correction') else 'En attente'
+            })
+        
+        return Response({
+            'etudiant': {
+                'id': soumissions[0].etudiant.id if soumissions else None,
+                'nom_complet': f"{soumissions[0].etudiant.last_name} {soumissions[0].etudiant.first_name}" if soumissions else None,
+                'matricule': soumissions[0].etudiant.matricule if soumissions else None
+            },
+            'soumissions': submissions_data
+        })
+    
+    except Exception as e:
+        logger.error(f"Error: {str(e)}")
+        return Response({"error": str(e)}, status=500)    
+    
+
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
+from .models import Soumission, Utilisateur
+import os
+from datetime import datetime
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def student_submissions(request, student_id):
+    # Vérifier si l'utilisateur est professeur ou l'étudiant lui-même
+    if not (request.user.role == Utilisateur.PROFESSEUR or request.user.id == student_id):
+        return Response({"detail": "Accès non autorisé"}, status=403)
+    
+    soumissions = Soumission.objects.filter(
+        etudiant_id=student_id
+    ).select_related('exercice').order_by('-date_soumission')
+    
+    if not soumissions.exists():
+        return Response({"detail": "Aucune soumission trouvée"}, status=404)
+    
+    etudiant = soumissions.first().etudiant
+    data = {
+        'etudiant': {
+            'nom_complet': f"{etudiant.first_name} {etudiant.last_name}",
+            'matricule': etudiant.username,
+        },
+        'soumissions': [
+            {
+                'id': soumission.id,
+                'exercice': soumission.exercice.titre,
+                'date_soumission': soumission.date_soumission,
+                'statut': 'Corrigé' if hasattr(soumission, 'correction') else 'En attente',
+                'note': soumission.correction.note if hasattr(soumission, 'correction') else None,
+                'en_retard': soumission.en_retard,
+                'est_plagiat': soumission.est_plagiat,
+            }
+            for soumission in soumissions
+        ]
+    }
+    return Response(data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def soumission_pdf(request, soumission_id):
+    soumission = get_object_or_404(Soumission, id=soumission_id)
+    
+    # Vérification des permissions
+    if not (request.user == soumission.etudiant or request.user.role == Utilisateur.PROFESSEUR):
+        return Response({"detail": "Accès non autorisé"}, status=403)
+    
+    if not soumission.fichier_pdf:
+        return Response({"detail": "Fichier PDF introuvable"}, status=404)
+    
+    try:
+        file_path = soumission.fichier_pdf.path
+        if os.path.exists(file_path):
+            response = FileResponse(
+                open(file_path, 'rb'),
+                content_type='application/pdf',
+                as_attachment=False  # Permet l'affichage dans le navigateur
+            )
+            response['Content-Disposition'] = f'inline; filename="{soumission.nom_original}"'
+            return response
+        return Response({"detail": "Fichier non trouvé sur le serveur"}, status=404)
+    except Exception as e:
+        return Response({"detail": str(e)}, status=500)
+
+
+# views.py
+# views.py
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def teacher_submissions(request):
+    try:
+        user = request.user
+
+        # Vérifie si l'utilisateur est professeur (principal ou supplémentaire)
+        if user.role != Utilisateur.PROFESSEUR:
+            return Response({'error': 'Accès réservé aux professeurs'}, status=403)
+
+        class_id = request.query_params.get('class_id')
+        exercise_id = request.query_params.get('exercise_id')
+
+        # Récupère toutes les soumissions des classes où le prof enseigne
+        queryset = Soumission.objects.filter(
+            Q(exercice__classe__professeur=user) | 
+            Q(exercice__classe__professeurs_supplementaires=user)
+        ).select_related(
+            'etudiant',
+            'exercice',
+            'exercice__classe',
+            'correction'
+        ).order_by('-date_soumission')
+
+        if class_id:
+            queryset = queryset.filter(exercice__classe__id=class_id)
+
+        if exercise_id:
+            queryset = queryset.filter(exercice__id=exercise_id)
+
+        serializer = TeacherSubmissionSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    except Exception as e:
+        logger.error(f"Erreur dans teacher_submissions: {str(e)}", exc_info=True)
+        return Response(
+            {'error': 'Une erreur est survenue lors de la récupération des soumissions'},
+            status=500
+        )
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_correction(request, soumission_id):
+    if request.user.role != 'PR':
+        return Response({"error": "Accès interdit"}, status=403)
+
+    try:
+        correction = Correction.objects.get(soumission__id=soumission_id)
+
+        # Champs modifiables par le professeur
+        correction.note = request.data.get('note', correction.note)
+        correction.feedback = request.data.get('feedback', correction.feedback)
+        correction.points_forts = request.data.get('points_forts', correction.points_forts)
+        correction.points_faibles = request.data.get('points_faibles', correction.points_faibles)
+        correction.commentaire_professeur = request.data.get('commentaire_professeur', correction.commentaire_professeur)
+
+        est_validee = request.data.get('est_validee')
+        if est_validee is not None:
+            correction.est_validee = est_validee
+            correction.date_validation = timezone.now() if est_validee else None
+
+        correction.save()
+        return Response({"message": "Correction mise à jour avec succès"})
+
+    except Correction.DoesNotExist:
+        return Response({"error": "Correction introuvable"}, status=404)
+
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from django.http import FileResponse, Http404
+from .models import Soumission
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_submission_pdf(request, submission_id):
+    try:
+        soumission = Soumission.objects.get(id=submission_id)
+        
+        # Vérifie que l'utilisateur a le droit d'accéder
+        if request.user.role != 'PR':
+            return Response({"error": "Accès interdit"}, status=403)
+        
+        if not soumission.fichier_pdf:
+            raise Http404("Fichier introuvable")
+
+        return FileResponse(soumission.fichier_pdf.open('rb'), content_type='application/pdf')
+    except Soumission.DoesNotExist:
+        raise Http404("Soumission non trouvée")
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def evolution_classe(request):
+    if request.user.role != 'PR':
+        return Response({"error": "Accès interdit"}, status=403)
+
+    evolution = []
+
+    exercices = Exercice.objects.all()
+    for exo in exercices:
+        soums = Soumission.objects.filter(exercice=exo, correction__isnull=False)
+        moyenne = soums.aggregate(moy=Avg('correction__note'))['moy']
+        if moyenne is not None:
+            evolution.append({
+                "exercice": exo.titre,
+                "note_moyenne": round(moyenne, 2)
+            })
+
+    return Response(evolution)
+
+
+
+class CurrentProfessorView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        if user.role == Utilisateur.PROFESSEUR:
+            serializer = UtilisateurSerializer(user)
+            return Response(serializer.data)
+        return Response({"detail": "Vous n'êtes pas un professeur."}, status=status.HTTP_403_FORBIDDEN)

@@ -12,7 +12,7 @@ urlpatterns = [
       # path('api/', include('gestion.urls')),
        # Page d'administration Django
       path('', include('gestion.urls')),  
-]
+] 
 
 # Ajouter cette ligne pour servir les fichiers médias pendant le développement
 if settings.DEBUG:

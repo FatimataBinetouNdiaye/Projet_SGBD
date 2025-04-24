@@ -4,7 +4,7 @@ import icon from '/src/assets/icon.png';
 import { Link as ScrollLink } from 'react-scroll';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import { FaBars, FaXmark } from 'react-icons/fa6';
-import { Database, Upload, LayoutDashboard, LogOut, User, Settings } from 'lucide-react';
+import { Database, Upload, LayoutDashboard, LogOut, User, Settings, Users } from 'lucide-react';
 import './Navbar.css';
 import { AuthContext } from '../context/AuthContext';
 
@@ -83,11 +83,17 @@ const Navbar = () => {
 
             {user && (
               <>
-                <li><RouterLink to="/soumettre" className="nav-link"><Upload className="link-icon" /> Soumettre</RouterLink></li>
+                {user.role !== 'PR' && (
+                  <li><RouterLink to="/soumettre" className="nav-link"><Upload className="link-icon" /> Soumettre</RouterLink></li>
+                )}
                 <li><RouterLink to={user.role === 'PR' ? "/dashboard/prof" : "/tableau-de-bord"} className="nav-link"><LayoutDashboard className="link-icon" /> Dashboard</RouterLink></li>
+                {user.role === 'PR' && (
+                  <li><RouterLink to="/liste-classes" className="nav-link"><Users className="link-icon" /> Liste des classes</RouterLink></li>
+                )}
                 <li><RouterLink to="/exercices" className="nav-link"><Database className="link-icon" /> Exercices</RouterLink></li>
-                <li><RouterLink to="/corrections" className="nav-link"><Database className="link-icon" /> Corrections</RouterLink></li>
-
+                {user.role !== 'PR' && (
+                  <li><RouterLink to="/corrections" className="nav-link"><Database className="link-icon" /> Corrections</RouterLink></li>
+                )}
               </>
             )}
           </ul>
@@ -96,14 +102,24 @@ const Navbar = () => {
             {user ? (
               <div className="dropdown-container">
                 <button onClick={toggleDropdown} className="profile-button">
-                  <img src={user.photo_profil || "https://via.placeholder.com/40"} alt="Profil" className="profile-img" />
+                  <img 
+                    src={user.photo_profil || "https://via.placeholder.com/40"} 
+                    alt="Profil" 
+                    className="profile-img" 
+                  />
                 </button>
 
                 {dropdownOpen && (
                   <div className="dropdown-menu">
-                    <RouterLink to="/profil" className="dropdown-item" onClick={() => setDropdownOpen(false)}><User className="dropdown-icon" /> Mon Profil</RouterLink>
-                    <RouterLink to="/parametres" className="dropdown-item" onClick={() => setDropdownOpen(false)}><Settings className="dropdown-icon" /> Paramètres</RouterLink>
-                    <button onClick={logout}><LogOut className="dropdown-icon" /> Déconnexion</button>
+                    <RouterLink to="/profil" className="dropdown-item" onClick={() => setDropdownOpen(false)}>
+                      <User className="dropdown-icon" /> Mon Profil
+                    </RouterLink>
+                    <RouterLink to="/parametres" className="dropdown-item" onClick={() => setDropdownOpen(false)}>
+                      <Settings className="dropdown-icon" /> Paramètres
+                    </RouterLink>
+                    <button onClick={logout} className="dropdown-item">
+                      <LogOut className="dropdown-icon" /> Déconnexion
+                    </button>
                   </div>
                 )}
               </div>
@@ -125,34 +141,126 @@ const Navbar = () => {
         {isMenuOpen && (
           <div className="mobile-menu">
             <ul>
-              <li>{location.pathname === "/" ? (
-                <ScrollLink to="Accueil" spy smooth offset={-100} onClick={() => setMenuOpen(false)} className="mobile-link">Accueil</ScrollLink>
-              ) : (
-                <RouterLink to="/" onClick={() => setMenuOpen(false)} className="mobile-link">Accueil</RouterLink>
-              )}</li>
+              <li>
+                {location.pathname === "/" ? (
+                  <ScrollLink 
+                    to="Accueil" 
+                    spy smooth offset={-100} 
+                    onClick={() => setMenuOpen(false)} 
+                    className="mobile-link"
+                  >
+                    Accueil
+                  </ScrollLink>
+                ) : (
+                  <RouterLink 
+                    to="/" 
+                    onClick={() => setMenuOpen(false)} 
+                    className="mobile-link"
+                  >
+                    Accueil
+                  </RouterLink>
+                )}
+              </li>
 
               {location.pathname === "/" && (
-                <li><ScrollLink to="Exercices" spy smooth offset={-100} onClick={() => setMenuOpen(false)} className="mobile-link">À propos</ScrollLink></li>
+                <li>
+                  <ScrollLink 
+                    to="Exercices" 
+                    spy smooth offset={-100} 
+                    onClick={() => setMenuOpen(false)} 
+                    className="mobile-link"
+                  >
+                    À propos
+                  </ScrollLink>
+                </li>
               )}
 
               {user && (
                 <>
-                  <li><RouterLink to="/soumettre" onClick={() => setMenuOpen(false)} className="mobile-link"><Upload className="mobile-icon" /> Soumettre</RouterLink></li>
-                  <li><RouterLink to={user.role === 'PR' ? "/dashboard/prof" : "/tableau-de-bord"} onClick={() => setMenuOpen(false)} className="mobile-link"><LayoutDashboard className="mobile-icon" /> Dashboard</RouterLink></li>
-                  <li><RouterLink to="/exercices" onClick={() => setMenuOpen(false)} className="mobile-link"><Database className="mobile-icon" /> Exercices</RouterLink></li>
-                  <li><RouterLink to="/corrections" onClick={() => setMenuOpen(false)} className="mobile-link"><Database className="mobile-icon" /> Corrections</RouterLink></li>
-
-                  <li><RouterLink to="/profil" onClick={() => setMenuOpen(false)} className="mobile-link"><User className="mobile-icon" /> Mon Profil</RouterLink></li>
+                  {user.role !== 'PR' && (
+                    <li>
+                      <RouterLink 
+                        to="/soumettre" 
+                        onClick={() => setMenuOpen(false)} 
+                        className="mobile-link"
+                      >
+                        <Upload className="mobile-icon" /> Soumettre
+                      </RouterLink>
+                    </li>
+                  )}
+                  <li>
+                    <RouterLink 
+                      to={user.role === 'PR' ? "/dashboard/prof" : "/tableau-de-bord"} 
+                      onClick={() => setMenuOpen(false)} 
+                      className="mobile-link"
+                    >
+                      <LayoutDashboard className="mobile-icon" /> Dashboard
+                    </RouterLink>
+                  </li>
+                  {user.role === 'PR' && (
+                    <li>
+                      <RouterLink 
+                        to="/liste-classes" 
+                        onClick={() => setMenuOpen(false)} 
+                        className="mobile-link"
+                      >
+                        <Users className="mobile-icon" /> Liste des classes
+                      </RouterLink>
+                    </li>
+                  )}
+                  <li>
+                    <RouterLink 
+                      to="/exercices" 
+                      onClick={() => setMenuOpen(false)} 
+                      className="mobile-link"
+                    >
+                      <Database className="mobile-icon" /> Exercices
+                    </RouterLink>
+                  </li>
+                  {user.role !== 'PR' && (
+                    <li>
+                      <RouterLink 
+                        to="/corrections" 
+                        onClick={() => setMenuOpen(false)} 
+                        className="mobile-link"
+                      >
+                        <Database className="mobile-icon" /> Corrections
+                      </RouterLink>
+                    </li>
+                  )}
+                  <li>
+                    <RouterLink 
+                      to="/profil" 
+                      onClick={() => setMenuOpen(false)} 
+                      className="mobile-link"
+                    >
+                      <User className="mobile-icon" /> Mon Profil
+                    </RouterLink>
+                  </li>
                 </>
               )}
 
               <li className="mobile-auth">
                 {user ? (
-                  <button onClick={logout} className="mobile-logout"><LogOut className="mobile-icon" /> Déconnexion</button>
+                  <button onClick={logout} className="mobile-logout">
+                    <LogOut className="mobile-icon" /> Déconnexion
+                  </button>
                 ) : (
                   <div className="mobile-auth-buttons">
-                    <RouterLink to="/login" onClick={() => setMenuOpen(false)} className="mobile-login">Connexion</RouterLink>
-                    <RouterLink to="/signup" onClick={() => setMenuOpen(false)} className="mobile-signup">Inscription</RouterLink>
+                    <RouterLink 
+                      to="/login" 
+                      onClick={() => setMenuOpen(false)} 
+                      className="mobile-login"
+                    >
+                      Connexion
+                    </RouterLink>
+                    <RouterLink 
+                      to="/signup" 
+                      onClick={() => setMenuOpen(false)} 
+                      className="mobile-signup"
+                    >
+                      Inscription
+                    </RouterLink>
                   </div>
                 )}
               </li>

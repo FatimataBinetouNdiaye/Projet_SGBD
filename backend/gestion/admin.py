@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Utilisateur, Soumission, Exercice, Correction
+from .models import Utilisateur, Soumission, Exercice, Correction, Classe
 from django.http import HttpResponse
 from .tasks import process_submission  # Importer la tâche Celery qui traite la soumission
 
@@ -12,6 +12,12 @@ class CustomUserAdmin(UserAdmin):
         (None, {'fields': ('email', 'password')}),
         ('Informations personnelles', {'fields': ('first_name', 'last_name', 'matricule')}),
         ('Permissions', {'fields': ('role', 'is_active', 'is_staff', 'is_superuser')}),  
+    )
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('email', 'first_name', 'last_name', 'matricule', 'role', 'password1', 'password2', 'is_staff', 'is_active')}
+        ),
     )
 
 class SoumissionAdmin(admin.ModelAdmin):
@@ -47,3 +53,4 @@ admin.site.register(Utilisateur, CustomUserAdmin)
 admin.site.register(Soumission, SoumissionAdmin)
 admin.site.register(Exercice)
 admin.site.register(Correction)
+admin.site.register(Classe)
