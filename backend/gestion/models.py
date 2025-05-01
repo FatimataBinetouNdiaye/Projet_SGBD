@@ -6,6 +6,11 @@ import fitz  # PyMuPDF
 from django.core.validators import FileExtensionValidator, MinValueValidator, MaxValueValidator
 
 
+from django.conf import settings
+from django.core.files.base import ContentFile
+from cryptography.fernet import Fernet
+from io import BytesIO
+
 
 #Début modification par diakhou
 from django.contrib.auth.models import BaseUserManager
@@ -191,77 +196,75 @@ class Exercice(models.Model):
         return f"{self.titre} ({self.classe})"
 
 class Soumission(models.Model):
-    """
-    Travaux rendus par les étudiants pour un exercice donné
-    """
-    # Relations
-    exercice = models.ForeignKey(Exercice, on_delete=models.CASCADE, 
-                               related_name='soumissions',
-                               verbose_name="Exercice concerné")
-    etudiant = models.ForeignKey(Utilisateur, on_delete=models.CASCADE, 
-                               limit_choices_to={'role': Utilisateur.ETUDIANT},
-                               related_name='soumissions',
-                               verbose_name="Étudiant")
-    
-    # Fichier soumis
-    fichier_pdf = models.FileField(
-        upload_to='soumissions/',
-        validators=[FileExtensionValidator(['pdf'])],
-        verbose_name="Fichier PDF rendu"
-    )
-    
-    nom_original = models.CharField(max_length=255, verbose_name="Nom original du fichier")
-    taille_fichier = models.PositiveIntegerField(verbose_name="Taille du fichier (octets)")
-    
-    # Métadonnées
-    date_soumission = models.DateTimeField(auto_now_add=True, verbose_name="Date de soumission")
-    en_retard = models.BooleanField(default=False, verbose_name="Rendu en retard")
-    ip_soumission = models.GenericIPAddressField(null=True, blank=True, verbose_name="IP de soumission")
-    
-    # Analyse
-    est_plagiat = models.BooleanField(default=False, verbose_name="Suspecté de plagiat")
-    score_plagiat = models.FloatField(null=True, blank=True, verbose_name="Score de similarité")
-    empreinte_texte = models.TextField(null=True, blank=True, verbose_name="Empreinte textuelle")
-    
+    exercice = models.ForeignKey('Exercice', on_delete=models.CASCADE, related_name='soumissions')
+    etudiant = models.ForeignKey('Utilisateur', on_delete=models.CASCADE, related_name='soumissions',
+                                 limit_choices_to={'role': 'etudiant'})
+
+    fichier_pdf = models.FileField(upload_to='soumissions/', validators=[FileExtensionValidator(['pdf'])])
+    nom_original = models.CharField(max_length=255)
+    taille_fichier = models.PositiveIntegerField()
+
+    date_soumission = models.DateTimeField(auto_now_add=True)
+    en_retard = models.BooleanField(default=False)
+    ip_soumission = models.GenericIPAddressField(null=True, blank=True)
+
+    est_plagiat = models.BooleanField(default=False)
+    score_plagiat = models.FloatField(null=True, blank=True)
+    empreinte_texte = models.TextField(null=True, blank=True)
+
     class Meta:
-        verbose_name = "Soumission"
-        verbose_name_plural = "Soumissions"
         unique_together = ('exercice', 'etudiant')
         ordering = ['-date_soumission']
-    
-    def save(self, *args, **kwargs):
-        # Vérification du retard
-        if self.exercice.date_limite and timezone.now() > self.exercice.date_limite:
-            self.en_retard = True
-        
-        # Calcul de la taille du fichier
-        if self.fichier_pdf and not self.taille_fichier:
-            self.taille_fichier = self.fichier_pdf.size
-        
-        super().save(*args, **kwargs)
-    
+
     def __str__(self):
         return f"Soumission de {self.etudiant} pour {self.exercice}"
-    def save(self, *args, **kwargs):
-        if self.fichier_pdf:
-            self.nom_original = self.fichier_pdf.name
-            self.taille_fichier = self.fichier_pdf.size
-        super().save(*args, **kwargs)
-    def extraire_texte_pdf(self):
-        if not self.fichier_pdf:
-            return ""
 
+    def save(self, *args, **kwargs):
+        # ⚠️ Vérifie si retard
+        if self.exercice.date_limite and timezone.now() > self.exercice.date_limite:
+            self.en_retard = True
+
+        if self.fichier_pdf and not self.taille_fichier:
+            self.nom_original = self.fichier_pdf.name
+
+            # 🔐 Lecture + chiffrement
+            original_data = self.fichier_pdf.read()
+            fernet = Fernet(settings.ENCRYPTION_KEY)
+            encrypted_data = fernet.encrypt(original_data)
+
+            # Remplace le fichier par version chiffrée
+            encrypted_file = ContentFile(encrypted_data)
+            self.fichier_pdf.save(self.fichier_pdf.name, encrypted_file, save=False)
+            self.taille_fichier = len(encrypted_data)
+
+        super().save(*args, **kwargs)
+
+    def get_pdf_dechiffre(self):
         try:
-            chemin = self.fichier_pdf.path  # Chemin local du PDF
-            doc = fitz.open(chemin)
+            fernet = Fernet(settings.ENCRYPTION_KEY)
+            with open(self.fichier_pdf.path, 'rb') as f:
+                encrypted_data = f.read()
+            return fernet.decrypt(encrypted_data)
+        except Exception as e:
+            print(f"Erreur de déchiffrement : {e}")
+            return None
+
+    def extraire_texte_pdf(self):
+        try:
+            pdf_bytes = self.get_pdf_dechiffre()
+            if not pdf_bytes:
+                return ""
+
+            buffer = BytesIO(pdf_bytes)
+            doc = fitz.open(stream=buffer, filetype="pdf")
             texte = ""
             for page in doc:
                 texte += page.get_text()
             doc.close()
             return texte.strip()
         except Exception as e:
-            print(f"❌ Erreur lors de l’extraction du texte PDF : {e}")
-            return ""    
+            print(f"❌ Erreur extraction texte : {e}")
+            return "" 
 class Correction(models.Model):
     """
     Corrections générées par l'IA et potentiellement modifiées par les professeurs

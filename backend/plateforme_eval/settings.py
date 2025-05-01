@@ -11,7 +11,20 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+
+
+import os
+
+from dotenv import load_dotenv
+load_dotenv()  
+
+
 from pathlib import Path
+
+from decouple import config
+from cryptography.fernet import Fernet
+ENCRYPTION_KEY = config('ENCRYPTION_KEY').encode()
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -87,7 +100,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'projet_sgbd',
         'USER': 'root',  
-        'PASSWORD': 'oracle', 
+        'PASSWORD': 'passer123@', 
         'HOST': 'localhost',
         'PORT': '3306',
     }

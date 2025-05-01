@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=C:\Users\KARDATECH\Desktop\cloneBD\Projet_SGBD\bd_project
+set VIRTUAL_ENV=C:\Users\bmd tech\Documents\ESP\BDavance\projet_BD\Projet_SGBD\bd_project
 
 if not defined PROMPT set PROMPT=$P$G
 
