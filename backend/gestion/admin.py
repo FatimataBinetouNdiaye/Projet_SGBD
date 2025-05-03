@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Utilisateur, Soumission, Exercice, Correction, Classe
+from .models import Utilisateur, Soumission, Exercice, Correction, Classe, Document
 from django.http import HttpResponse
 from .tasks import process_submission  # Importer la tâche Celery qui traite la soumission
 
@@ -54,3 +54,4 @@ admin.site.register(Soumission, SoumissionAdmin)
 admin.site.register(Exercice)
 admin.site.register(Correction)
 admin.site.register(Classe)
+admin.site.register(Document)

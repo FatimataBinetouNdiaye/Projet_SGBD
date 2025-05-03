@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=C:\Users\KARDATECH\Desktop\cloneBD\Projet_SGBD\bd_project
+set "VIRTUAL_ENV=C:\Users\HP\Desktop\Projet_SGBD_V1\bd_project"
 
 if not defined PROMPT set PROMPT=$P$G
 
@@ -24,8 +24,7 @@ set PYTHONHOME=
 if defined _OLD_VIRTUAL_PATH set PATH=%_OLD_VIRTUAL_PATH%
 if not defined _OLD_VIRTUAL_PATH set _OLD_VIRTUAL_PATH=%PATH%
 
-set PATH=%VIRTUAL_ENV%\Scripts;%PATH%
-set VIRTUAL_ENV_PROMPT=(bd_project) 
+set "PATH=%VIRTUAL_ENV%\Scripts;%PATH%"
 
 :END
 if defined _OLD_CODEPAGE (

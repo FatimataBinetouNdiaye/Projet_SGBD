@@ -281,7 +281,14 @@ class Correction(models.Model):
     est_validee = models.BooleanField(default=False, verbose_name="Validée par le professeur")
     commentaire_professeur = models.TextField(blank=True, null=True, verbose_name="Commentaire du professeur")
     date_validation = models.DateTimeField(null=True, blank=True, verbose_name="Date de validation")
-
+    plagiarism_report = models.JSONField(
+        null=True,
+        blank=True,
+        default=list,  # Ceci va stocker [] au lieu de NULL pour les nouvelles entrées
+        help_text="Rapport de plagiat sous forme de liste"
+    )
+    plagiarism_score = models.FloatField(null=True, blank=True)
+    est_plagiat = models.BooleanField(default=False)
     contenu_brut = models.TextField(blank=True, null=True, verbose_name="Réponse brute de l'IA (non parsée)")
 
     class Meta:
@@ -500,3 +507,14 @@ class Feedback(models.Model):
     
     def __str__(self):
         return f"Feedback reçu le {self.date_received}"
+
+
+
+class Document(models.Model):
+    title = models.CharField(max_length=100)
+    file = models.FileField(upload_to='documents/')
+
+    def __str__(self):
+        return self.title        
+    
+

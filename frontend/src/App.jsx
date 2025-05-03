@@ -7,7 +7,7 @@ import Accueil from './components/Accueil';
 import Exercices from './components/Exercices';
 import Apropos from './components/Apropos';
 import ExerciceList from './components/ExerciceList';
-import Footer from './components/footer';
+import Footer from './components/Footer';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import SubmissionForm from './components/SubmissionForm';

@@ -64,17 +64,34 @@ function StudentSubmissions() {
             console.error("Erreur lors de l'ouverture du PDF :", error);
         }
     };
-
-    const handleEdit = (submission) => {
-        setEditingId(submission.id);
-        setFormData({
-            note: submission.note || '',
-            feedback: submission.feedback || '',
-            points_forts: submission.points_forts || '',
-            points_faibles: submission.points_faibles || '',
-            commentaire_professeur: submission.commentaire_professeur || '',
-        });
+    
+    
+    const handleEdit = async (soumission) => {
+        const token = localStorage.getItem('token');
+        try {
+            const response = await axios.get(
+                `http://127.0.0.1:8000/api/soumissions/${soumission.id}/correction/`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            console.log(response.data); // Vérifier les données retournées
+    
+            const correction = response.data;
+            setFormData({
+                note: correction.note || '',
+                feedback: correction.feedback || '',
+                points_forts: correction.points_forts || '',
+                points_faibles: correction.points_faibles || '',
+                commentaire_professeur: correction.commentaire_professeur || ''
+            });
+            setEditingId(soumission.id);
+        } catch (error) {
+            console.error('Erreur lors de la récupération des données de correction', error);
+        }
     };
+    
+    
+    
+      
 
     const handleChange = (e) => {
         setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -198,123 +215,124 @@ function StudentSubmissions() {
                                                     )}
                                                 </td>
                                             </tr>
-                                            {editingId === soumission.id && (
-                                                <tr>
-                                                    <td colSpan="5" className="px-6 py-4 bg-gray-50">
-                                                        <div className="space-y-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-                                                            <h3 className="text-lg font-semibold flex items-center" style={{ color: colors.textDark }}>
-                                                                <span className="w-2 h-5 rounded-full mr-2" style={{ backgroundColor: colors.brandPrimary }}></span>
-                                                                Modifier la correction
-                                                            </h3>
-                                                            
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                <div>
-                                                                    <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Note /20</label>
-                                                                    <input
-                                                                        type="number"
-                                                                        name="note"
-                                                                        min="0"
-                                                                        max="20"
-                                                                        step="0.5"
-                                                                        value={formData.note}
-                                                                        onChange={handleChange}
-                                                                        className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
-                                                                        style={{ 
-                                                                            borderColor: colors.brandPrimaryLight,
-                                                                            focusRing: colors.brandPrimary 
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <div>
-                                                                <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Feedback</label>
-                                                                <textarea
-                                                                    name="feedback"
-                                                                    value={formData.feedback}
-                                                                    onChange={handleChange}
-                                                                    rows={3}
-                                                                    className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
-                                                                    style={{ 
-                                                                        borderColor: colors.brandPrimaryLight,
-                                                                        focusRing: colors.brandPrimary 
-                                                                    }}
-                                                                />
-                                                            </div>
-                                                            
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                <div>
-                                                                    <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Points forts</label>
-                                                                    <textarea
-                                                                        name="points_forts"
-                                                                        value={formData.points_forts}
-                                                                        onChange={handleChange}
-                                                                        rows={2}
-                                                                        className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
-                                                                        style={{ 
-                                                                            borderColor: colors.brandPrimaryLight,
-                                                                            focusRing: colors.brandPrimary 
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Points faibles</label>
-                                                                    <textarea
-                                                                        name="points_faibles"
-                                                                        value={formData.points_faibles}
-                                                                        onChange={handleChange}
-                                                                        rows={2}
-                                                                        className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
-                                                                        style={{ 
-                                                                            borderColor: colors.brandPrimaryLight,
-                                                                            focusRing: colors.brandPrimary 
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <div>
-                                                                <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Commentaire du professeur</label>
-                                                                <textarea
-                                                                    name="commentaire_professeur"
-                                                                    value={formData.commentaire_professeur}
-                                                                    onChange={handleChange}
-                                                                    rows={2}
-                                                                    className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
-                                                                    style={{ 
-                                                                        borderColor: colors.brandPrimaryLight,
-                                                                        focusRing: colors.brandPrimary 
-                                                                    }}
-                                                                />
-                                                            </div>
-                                                            
-                                                            <div className="flex justify-end space-x-3 pt-2">
-                                                                <button
-                                                                    onClick={() => setEditingId(null)}
-                                                                    className="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
-                                                                    style={{ 
-                                                                        backgroundColor: '#F5F5F5',
-                                                                        color: colors.textDark
-                                                                    }}
-                                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#EEEEEE'}
-                                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F5F5F5'}
-                                                                >
-                                                                    Annuler
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleUpdate(soumission.id)}
-                                                                    className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors duration-200"
-                                                                    style={{ backgroundColor: colors.brandPrimary }}
-                                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = colors.brandPrimaryDark}
-                                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = colors.brandPrimary}
-                                                                >
-                                                                    Enregistrer
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            )}
+                                           {editingId === soumission.id && (
+    <tr>
+        <td colSpan="5" className="px-6 py-4 bg-gray-50">
+            <div className="space-y-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+                <h3 className="text-lg font-semibold flex items-center" style={{ color: colors.textDark }}>
+                    <span className="w-2 h-5 rounded-full mr-2" style={{ backgroundColor: colors.brandPrimary }}></span>
+                    Modifier la correction
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Note /20</label>
+                        <input
+                            type="number"
+                            name="note"
+                            min="0"
+                            max="20"
+                            step="0.5"
+                            value={formData.note}
+                            onChange={handleChange}
+                            className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
+                            style={{ 
+                                borderColor: colors.brandPrimaryLight,
+                                focusRing: colors.brandPrimary 
+                            }}
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Feedback</label>
+                    <textarea
+                        name="feedback"
+                        value={formData.feedback}
+                        onChange={handleChange}
+                        rows={3}
+                        className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
+                        style={{ 
+                            borderColor: colors.brandPrimaryLight,
+                            focusRing: colors.brandPrimary 
+                        }}
+                    />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Points forts</label>
+                        <textarea
+                            name="points_forts"
+                            value={formData.points_forts}
+                            onChange={handleChange}
+                            rows={2}
+                            className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
+                            style={{ 
+                                borderColor: colors.brandPrimaryLight,
+                                focusRing: colors.brandPrimary 
+                            }}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Points faibles</label>
+                        <textarea
+                            name="points_faibles"
+                            value={formData.points_faibles}
+                            onChange={handleChange}
+                            rows={2}
+                            className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
+                            style={{ 
+                                borderColor: colors.brandPrimaryLight,
+                                focusRing: colors.brandPrimary 
+                            }}
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: colors.textDark }}>Commentaire du professeur</label>
+                    <textarea
+                        name="commentaire_professeur"
+                        value={formData.commentaire_professeur}
+                        onChange={handleChange}
+                        rows={2}
+                        className="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-offset-2 focus:ring-opacity-50"
+                        style={{ 
+                            borderColor: colors.brandPrimaryLight,
+                            focusRing: colors.brandPrimary 
+                        }}
+                    />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-2">
+                    <button
+                        onClick={() => setEditingId(null)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                        style={{ 
+                            backgroundColor: '#F5F5F5',
+                            color: colors.textDark
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#EEEEEE'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F5F5F5'}
+                    >
+                        Annuler
+                    </button>
+                    <button
+                        onClick={() => handleUpdate(soumission.id)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors duration-200"
+                        style={{ backgroundColor: colors.brandPrimary }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = colors.brandPrimaryDark}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = colors.brandPrimary}
+                    >
+                        Enregistrer
+                    </button>
+                </div>
+            </div>
+        </td>
+    </tr>
+)}
+
                                         </React.Fragment>
                                     ))}
                                 </tbody>

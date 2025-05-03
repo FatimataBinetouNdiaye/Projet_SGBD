@@ -115,18 +115,33 @@ class SoumissionLightSerializer(serializers.ModelSerializer):
 
 # 2. CorrectionSerializer : inclut la soumission
 class CorrectionSerializer(serializers.ModelSerializer):
-    soumission = SoumissionLightSerializer(read_only=True)
+    soumission = serializers.SerializerMethodField()
+    plagiarism_report = serializers.SerializerMethodField()
 
     class Meta:
         model = Correction
-        fields = [
-            'id', 'soumission', 'note', 'feedback',
-            'points_forts', 'points_faibles', 'commentaire_professeur'
-        ]
+        fields = '__all__'
+
+    def get_soumission(self, obj):
+        return {
+            'id': obj.soumission.id,
+            'etudiant_id': obj.soumission.etudiant.id,
+            'exercice': {
+                'id': obj.soumission.exercice.id if obj.soumission.exercice else None,
+                'titre': obj.soumission.exercice.titre if obj.soumission.exercice else 'Titre inconnu'
+            }
+        }
+
+    def get_plagiarism_report(self, obj):
+        return obj.plagiarism_report or {}
 
 # 3. SoumissionSerializer (inchangé sauf qu’il garde CorrectionSerializer)
 class SoumissionSerializer(serializers.ModelSerializer):
-    correction = CorrectionSerializer(read_only=True)
+    note = serializers.SerializerMethodField()
+    feedback = serializers.SerializerMethodField()
+    points_forts = serializers.SerializerMethodField()
+    points_faibles = serializers.SerializerMethodField()
+    commentaire_professeur = serializers.SerializerMethodField()
 
     class Meta:
         model = Soumission
@@ -135,9 +150,30 @@ class SoumissionSerializer(serializers.ModelSerializer):
             'date_soumission', 'en_retard', 'ip_soumission',
             'est_plagiat', 'score_plagiat', 'empreinte_texte',
             'exercice', 'etudiant',
-            'correction'
+            'note', 'feedback', 'points_forts', 'points_faibles', 'commentaire_professeur'
         ]
         read_only_fields = ('etudiant', 'date_soumission')
+
+    def get_note(self, obj):
+        correction = getattr(obj, 'correction', None)
+        return correction.note if correction else None
+
+    def get_feedback(self, obj):
+        correction = getattr(obj, 'correction', None)
+        return correction.feedback if correction else ""
+
+    def get_points_forts(self, obj):
+        correction = getattr(obj, 'correction', None)
+        return correction.points_forts if correction else ""
+
+    def get_points_faibles(self, obj):
+        correction = getattr(obj, 'correction', None)
+        return correction.points_faibles if correction else ""
+
+    def get_commentaire_professeur(self, obj):
+        correction = getattr(obj, 'correction', None)
+        return correction.commentaire_professeur if correction else ""
+
 
         
 class ExerciceSerializer(serializers.ModelSerializer):
@@ -474,3 +510,41 @@ class TeacherSubmissionSerializer(serializers.ModelSerializer):
             'est_validee': obj.correction.est_validee,
             'date_validation': obj.correction.date_validation
         }
+
+
+class PlagiarismDetailSerializer(serializers.Serializer):
+    cosine = serializers.FloatField()
+    jaccard = serializers.FloatField()
+    text1_length = serializers.IntegerField()
+    text2_length = serializers.IntegerField()
+
+from rest_framework import serializers
+from gestion.models import Correction
+
+class PlagiarismReportSerializer(serializers.ModelSerializer):
+    exercice_titre = serializers.CharField(source='soumission.exercice.titre', read_only=True)
+    date_soumission = serializers.DateTimeField(source='soumission.date_soumission', read_only=True)
+    
+    class Meta:
+        model = Correction
+        fields = [
+            'id',
+            'note',  # Assurez-vous que ce champ existe dans le modèle Correction
+            'exercice_titre',
+            'date_soumission',
+            'plagiarism_score',
+            'plagiarism_report',
+            'feedback',
+            'points_forts',
+            'points_faibles'
+        ]
+class CorrectionSerializer(serializers.ModelSerializer):
+    plagiarism_report = PlagiarismReportSerializer(many=True)
+    
+    class Meta:
+        model = Correction
+        fields = [
+            'id', 'soumission', 'note', 'feedback',
+            'points_forts', 'points_faibles', 'contenu_brut',
+            'plagiarism_report', 'plagiarism_score', 'est_plagiat'
+        ]

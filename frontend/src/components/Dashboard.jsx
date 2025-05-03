@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart, CheckCircle, Clock } from 'lucide-react';
+import { BarChart, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { format, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -17,7 +17,6 @@ import {
   Filler 
 } from 'chart.js';
 
-// Enregistrez les composants nécessaires de Chart.js
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -35,46 +34,49 @@ function Dashboard() {
     brandPrimaryLight: '#81C784',
     brandPrimaryLighter: '#C8E6C9',
     brandPrimaryDark: '#388E3C',
+    brandDanger: '#F44336'
   };
+  
   const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState({
-    stats: { completed: 0, total: 0, average_score: 0, next_deadline: null },
+    stats: { 
+      completed: 0, 
+      total: 0, 
+      average_score: 0, 
+      next_deadline: null,
+      unsubmitted_count: 0,
+      late_submissions: 0
+    },
+    all_submissions: [],
     recent_submissions: []
   });
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 10
+  });
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userData = JSON.parse(localStorage.getItem('user'));
-
-    if (!token || !userData) {
-      navigate('/login');
-      return;
-    }
-
     const fetchDashboardData = async () => {
       try {
+        const token = localStorage.getItem('token');
         const response = await axios.get('http://127.0.0.1:8000/api/student/dashboard/', {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Authorization': `Bearer ${token}`
           }
         });
-
+        
         setDashboardData({
-          stats: response.data.stats || {
-            completed: 0,
-            total: 0,
-            average_score: 0,
-            next_deadline: null
-          },
-          recent_submissions: response.data.recent_submissions || []
+          stats: response.data.stats,
+          all_submissions: response.data.all_submissions,
+          recent_submissions: response.data.recent_submissions
         });
+        
       } catch (err) {
         if (err.response?.status === 401) {
           localStorage.removeItem('token');
-          localStorage.removeItem('user');
           navigate('/login');
         } else {
           setError(err.response?.data?.message || "Erreur de chargement des données");
@@ -87,74 +89,59 @@ function Dashboard() {
     fetchDashboardData();
   }, [navigate]);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-   // Préparer les données pour le graphique avec les noms d'exercices
   const prepareChartData = () => {
-    const filteredSubmissions = dashboardData.recent_submissions
+    const correctedSubmissions = dashboardData.all_submissions
       .filter(sub => sub.correction?.note !== undefined)
       .sort((a, b) => new Date(a.submission_date) - new Date(b.submission_date));
 
-    // Raccourcir les noms d'exercices si trop longs
-    const labels = filteredSubmissions.map(sub => {
-      const maxLength = 15;
-      return sub.exercise_title.length > maxLength 
-        ? sub.exercise_title.substring(0, maxLength) + '...' 
-        : sub.exercise_title;
-    });
-    
-    const data = filteredSubmissions.map(sub => sub.correction.note);
+    const labels = correctedSubmissions.map((_, index) => `Soumission ${index + 1}`);
+    const data = correctedSubmissions.map(sub => sub.correction.note);
 
     return {
       labels,
-      datasets: [
-        {
-          label: 'Notes',
-          data: data,
-          borderColor: colors.brandPrimaryDark, // Utilisation du vert foncé pour la ligne
-          backgroundColor: colors.brandPrimaryLighter, // Utilisation du vert très clair pour le fond
-          tension: 0.3,
-          pointBackgroundColor: colors.brandPrimary,
-          pointBorderColor: '#fff',
-          pointRadius: 5,
-          pointHoverRadius: 7,
-          borderWidth: 2,
-          fill: true // Remplissage sous la courbe
-        }
-      ]
+      datasets: [{
+        label: 'Notes',
+        data,
+        borderColor: colors.brandPrimaryDark,
+        backgroundColor: colors.brandPrimaryLighter,
+        tension: 0.3,
+        fill: true,
+        pointBackgroundColor: colors.brandPrimary,
+        pointBorderColor: '#fff',
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        borderWidth: 2
+      }]
     };
   };
 
   const chartOptions = {
     responsive: true,
     plugins: {
-      legend: {
-        position: 'top',
-      },
+      legend: { display: false },
       title: {
         display: true,
-        text: 'Notes par exercice',
+        text: 'Évolution des notes',
+        font: { size: 16 }
       },
       tooltip: {
         callbacks: {
           title: (context) => {
-            const fullTitle = dashboardData.recent_submissions
+            const submission = dashboardData.all_submissions
               .filter(sub => sub.correction?.note !== undefined)
-              .sort((a, b) => new Date(a.submission_date) - new Date(b.submission_date))[context[0].dataIndex].exercise_title;
-            return fullTitle;
+              .sort((a, b) => new Date(a.submission_date) - new Date(b.submission_date))
+              [context[0].dataIndex];
+            return submission.exercise_title;
           },
           label: (context) => {
-            const submission = dashboardData.recent_submissions
+            const submission = dashboardData.all_submissions
               .filter(sub => sub.correction?.note !== undefined)
-              .sort((a, b) => new Date(a.submission_date) - new Date(b.submission_date))[context.dataIndex];
+              .sort((a, b) => new Date(a.submission_date) - new Date(b.submission_date))
+              [context.dataIndex];
             return [
               `Note: ${context.raw}/20`,
-              `Soumis le: ${format(new Date(submission.submission_date), 'dd MMM yyyy', { locale: fr })}`
+              `Date: ${format(new Date(submission.submission_date), 'dd MMM yyyy', { locale: fr })}`,
+              submission.en_retard ? '⚠ En retard' : 'À temps'
             ];
           }
         }
@@ -164,63 +151,74 @@ function Dashboard() {
       y: {
         min: 0,
         max: 20,
-        ticks: {
-          stepSize: 2
-        }
+        ticks: { stepSize: 2 },
+        title: { display: true, text: 'Note (/20)' }
       },
       x: {
-        ticks: {
-          autoSkip: false,
-          maxRotation: 45,
-          minRotation: 45
-        }
+        title: { display: true, text: 'Historique des soumissions' }
       }
-    },
+    }
   };
 
+  if (loading) {
+    return <div className="flex justify-center items-center h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    </div>;
+  }
+
   if (error) {
-    return (
-      <div className="bg-red-50 border-l-4 border-red-500 p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div className="ml-3">
-            <p className="text-sm text-red-700">
-              Erreur: {error}. <button onClick={() => window.location.reload()} className="font-medium underline text-red-700 hover:text-red-600">Réessayer</button>
-            </p>
-          </div>
+    return <div className="bg-red-50 border-l-4 border-red-500 p-4">
+      <div className="flex">
+        <div className="flex-shrink-0">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+        </div>
+        <div className="ml-3">
+          <p className="text-sm text-red-700">
+            Erreur: {error}. <button 
+              onClick={() => window.location.reload()} 
+              className="font-medium underline text-red-700 hover:text-red-600"
+            >
+              Réessayer
+            </button>
+          </p>
         </div>
       </div>
-    );
+    </div>;
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-8 mt-16">
+    <div className="container mx-auto px-4 py-8 space-y-8">
       <header className="text-center">
         <h1 className="text-3xl font-bold text-gray-900">Tableau de bord étudiant</h1>
-        <p className="mt-2 text-gray-600">Suivez votre progression et vos soumissions</p>
+        <p className="mt-2 text-gray-600">Votre progression académique complète</p>
       </header>
 
-      <div className="grid md:grid-cols-3 gap-6">
+      {/* Statistiques */}
+      <div className="grid md:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Exercices complétés</h2>
             <CheckCircle className="h-6 w-6 text-green-500" />
           </div>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{dashboardData.stats.completed}</p>
-          <p className="mt-1 text-sm text-gray-600">Sur {dashboardData.stats.total} exercices au total</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">
+            {dashboardData.stats.completed}/{dashboardData.stats.total}
+          </p>
+          <p className="mt-1 text-sm text-gray-600">
+            {dashboardData.stats.unsubmitted_count} non soumis
+          </p>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Score moyen</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Moyenne générale</h2>
             <BarChart className="h-6 w-6 text-green-500" />
           </div>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{dashboardData.stats.average_score.toFixed(1)}/20</p>
-          <p className="mt-1 text-sm text-gray-600">Basé sur toutes les soumissions</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">
+            {dashboardData.stats.average_score.toFixed(1)}/20
+          </p>
+          <p className="mt-1 text-sm text-gray-600">
+            Basé sur {dashboardData.stats.completed} corrections
+          </p>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow-md">
@@ -231,82 +229,136 @@ function Dashboard() {
           {dashboardData.stats.next_deadline ? (
             <>
               <p className="mt-2 text-3xl font-bold text-gray-900">
-                {differenceInDays(new Date(dashboardData.stats.next_deadline.date_limite), new Date())} jours
+                {dashboardData.stats.next_deadline.days_left} jours
               </p>
-              <p className="mt-1 text-sm text-gray-600">{dashboardData.stats.next_deadline.exercise_title}</p>
+              <p className="mt-1 text-sm text-gray-600 truncate">
+                {dashboardData.stats.next_deadline.title}
+              </p>
             </>
           ) : (
             <p className="mt-2 text-gray-600">Aucune échéance à venir</p>
           )}
         </div>
-      </div>
-     
 
-      {/* Ajoutez cette nouvelle section pour le graphique */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Retards</h2>
+            <AlertCircle className="h-6 w-6 text-red-500" />
+          </div>
+          <p className="mt-2 text-3xl font-bold text-red-600">
+            {dashboardData.stats.late_submissions}
+          </p>
+          <p className="mt-1 text-sm text-gray-600">
+            Soumissions en retard
+          </p>
+        </div>
+      </div>
+
+      {/* Graphique d'évolution */}
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Progression académique</h2>
-        {dashboardData.recent_submissions.filter(sub => sub.correction?.note !== undefined).length > 1 ? (
-          <div className="h-80"> {/* Taille fixe pour le conteneur du graphique */}
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Évolution de vos notes</h2>
+        {dashboardData.all_submissions.filter(sub => sub.correction?.note !== undefined).length > 1 ? (
+          <div className="h-80">
             <Line data={prepareChartData()} options={chartOptions} />
           </div>
         ) : (
           <div className="text-center py-8 text-gray-500">
-            {dashboardData.recent_submissions.length === 0 
+            {dashboardData.all_submissions.length === 0 
               ? "Aucune soumission disponible" 
               : "Pas assez de données pour afficher la progression (minimum 2 notes requises)"}
           </div>
         )}
       </div>
 
+      {/* Toutes les soumissions */}
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Soumissions récentes</h2>
-        <div className="space-y-4">
-          {dashboardData.recent_submissions.length > 0 ? (
-            dashboardData.recent_submissions.map((submission, index) => (
-              <div key={index} className="p-4 bg-gray-50 rounded-lg shadow-sm space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-gray-900">{submission.exercise_title}</h3>
-                    <p className="text-sm text-gray-600">
-                      Soumis le {format(new Date(submission.submission_date), 'dd MMM yyyy', { locale: fr })}
-                    </p>
-                  </div>
-                  <div className="flex items-center">
-                    {submission.correction?.note !== undefined ? (
-                      <span className={submission.correction.note >= 10 ? "font-semibold text-green-600" : "font-semibold text-red-600"}>
-                        {submission.correction.note}/20
-                      </span>
-                    ) : (
-                      <span className="text-gray-500">En attente</span>
-                    )}
-                  </div>
-                </div>
-
-                {submission.correction && (
-                  <div className="mt-2 p-3 border border-gray-200 rounded bg-white text-sm text-gray-700 space-y-1">
-                    <p><strong>Feedback :</strong> {submission.correction.feedback || "Aucun feedback généré."}</p>
-                    <p><strong>Points forts :</strong> {submission.correction.points_forts || "Non précisé"}</p>
-                    <p><strong>Points faibles :</strong> {submission.correction.points_faibles || "Non précisé"}</p>
-
-                    {submission.correction.commentaire_professeur && (
-                      <div className="mt-2 border-t pt-2 text-gray-800">
-                        <p className="font-semibold text-green-700">Commentaire du professeur :</p>
-                        <p>{submission.correction.commentaire_professeur}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500">Aucune soumission récente</p>
-              <button onClick={() => window.location.reload()} className="mt-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200">
-                Actualiser
-              </button>
-            </div>
-          )}
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Historique complet des soumissions</h2>
+          <span className="text-sm text-gray-500">
+            {dashboardData.all_submissions.length} soumissions au total
+          </span>
         </div>
+        
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Exercice</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Note</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {dashboardData.all_submissions
+                .slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
+                .map((submission, index) => (
+                  <tr 
+                    key={index} 
+                    className={`hover:bg-gray-50 cursor-pointer ${submission.en_retard ? 'bg-red-50' : ''}`}
+                    onClick={() => navigate(`/submissions/${submission.id}`)}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {submission.exercise_title}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-500">
+                        {format(new Date(submission.submission_date), 'dd MMM yyyy', { locale: fr })}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {submission.correction ? (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                          Corrigé
+                        </span>
+                      ) : (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                          En attente
+                        </span>
+                      )}
+                      {submission.en_retard && (
+                        <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                          Retard
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {submission.correction ? (
+                        <span className={`font-semibold ${submission.correction.note >= 10 ? 'text-green-600' : 'text-red-600'}`}>
+                          {submission.correction.note}/20
+                        </span>
+                      ) : '-'}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {dashboardData.all_submissions.length > pagination.pageSize && (
+          <div className="flex items-center justify-between mt-4">
+            <button 
+              onClick={() => setPagination({...pagination, page: Math.max(1, pagination.page - 1)})}
+              disabled={pagination.page === 1}
+              className="px-4 py-2 border rounded-md disabled:opacity-50"
+            >
+              Précédent
+            </button>
+            <span className="text-sm text-gray-700">
+              Page {pagination.page} sur {Math.ceil(dashboardData.all_submissions.length / pagination.pageSize)}
+            </span>
+            <button 
+              onClick={() => setPagination({...pagination, page: pagination.page + 1})}
+              disabled={pagination.page * pagination.pageSize >= dashboardData.all_submissions.length}
+              className="px-4 py-2 border rounded-md disabled:opacity-50"
+            >
+              Suivant
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

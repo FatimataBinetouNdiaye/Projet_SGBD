@@ -15,7 +15,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Avg
 from .models import *
-from .serializers import UtilisateurSerializer, ClasseSerializer, ExerciceSerializer, SoumissionSerializer, CorrectionSerializer, ExerciceListSerializer, RecentSubmissionSerializer, TeacherSubmissionSerializer
+from .serializers import UtilisateurSerializer, ClasseSerializer, ExerciceSerializer, SoumissionSerializer, CorrectionSerializer, ExerciceListSerializer, RecentSubmissionSerializer, TeacherSubmissionSerializer,  PlagiarismReportSerializer
 from rest_framework.permissions import AllowAny  # <-- Ajoutez cette importation
 
 
@@ -210,7 +210,7 @@ from .serializers import SoumissionSerializer
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser, FormParser
 from gestion.tasks import get_ai_correction, process_submission  # Importer la tâche Celery
-
+from rest_framework.decorators import action
 from rest_framework import viewsets
 from rest_framework.response import Response
 from .models import Soumission
@@ -219,7 +219,6 @@ from .tasks import process_submission  # Importer la tâche Celery
 class SoumissionViewSet(viewsets.ModelViewSet):
     queryset = Soumission.objects.all()
     serializer_class = SoumissionSerializer
-    
     
     def perform_create(self, serializer):
         # Crée la soumission avec les données fournies dans le formulaire
@@ -234,23 +233,85 @@ class SoumissionViewSet(viewsets.ModelViewSet):
 
         # Retourner une réponse immédiate pour informer l'utilisateur
         return Response({'message': 'Soumission reçue, correction en cours...'}, status=status.HTTP_201_CREATED)
-
-
-class CorrectionViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = CorrectionSerializer
-    permission_classes = [IsAuthenticated]  # Assure-toi que l'utilisateur est authentifié
-
+    
     def get_queryset(self):
         user = self.request.user
+        # filtrer selon le rôle (professeur ou étudiant), par exemple :
+        return Soumission.objects.filter(exercice__professeur=user)
+    
+    def perform_update(self, serializer):
+        soumission = serializer.save()
 
-        # Vérifie si l'utilisateur est authentifié
-        if not user.is_authenticated:
-            raise PermissionDenied("Vous devez être authentifié pour accéder à cette ressource.")
+        correction_data = self.request.data.get('correction', None)
+        if correction_data:
+            correction = soumission.correction
+            correction.note = correction_data.get('note', correction.note)
+            correction.feedback = correction_data.get('feedback', correction.feedback)
+            correction.points_forts = correction_data.get('points_forts', correction.points_forts)
+            correction.points_faibles = correction_data.get('points_faibles', correction.points_faibles)
+            correction.commentaire_professeur = correction_data.get('commentaire_professeur', correction.commentaire_professeur)
+            correction.save()
 
-        # Vérifie le rôle de l'utilisateur
-        if user.role == Utilisateur.ETUDIANT:
-            return Correction.objects.filter(soumission__etudiant=user)
-        return Correction.objects.filter(soumission__exercice__professeur=user)
+        return Response(SoumissionSerializer(soumission).data)
+    @action(detail=True, methods=['get'])
+    def correction(self, request, pk=None):
+        soumission = self.get_object()
+        correction = soumission.correction  # Assuming each submission has a related correction
+        serializer = CorrectionSerializer(correction)
+        return Response(serializer.data)
+
+
+
+class CorrectionViewSet(viewsets.ModelViewSet):
+    serializer_class = PlagiarismReportSerializer
+    queryset = Correction.objects.all().select_related(
+        'soumission',
+        'soumission__exercice',
+        'soumission__etudiant'
+    )
+    
+    def get_queryset(self):
+        queryset = Correction.objects.all().select_related(
+            'soumission__exercice',
+            'soumission__etudiant'
+        )
+        
+        # Filtrage strict par étudiant connecté
+        if self.request.user.role == 'ET':
+            queryset = queryset.filter(
+                soumission__etudiant=self.request.user
+            )
+        
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Formatage spécial pour le frontend
+        data = []
+        for corr in queryset:
+            data.append({
+                'id': corr.id,
+                'note': corr.note,
+                'feedback': corr.feedback,
+                'points_forts': corr.points_forts,
+                'points_faibles': corr.points_faibles,
+                'date_soumission': corr.soumission.date_soumission,
+                'commentaire_professeur': corr.commentaire_professeur,
+                'est_plagiat': corr.est_plagiat,
+                'plagiarism_score': corr.plagiarism_score,
+                'plagiarism_report': corr.plagiarism_report or {},
+                'soumission': {
+                    'id': corr.soumission.id,
+                    'etudiant_id': corr.soumission.etudiant.id,
+                    'exercice': {
+                        'id': corr.soumission.exercice.id if corr.soumission.exercice else None,
+                        'titre': corr.soumission.exercice.titre if corr.soumission.exercice else 'Titre inconnu'
+                    }
+                }
+            })
+        
+        return Response(data)
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -289,51 +350,68 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# api/views.py
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.db.models import Avg, Count
+from .models import Soumission, Exercice
+
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+from django.utils.timezone import now
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def student_dashboard_data(request):
     try:
         student = request.user
-        
-        # 1. Récupération de toutes les soumissions avec correction
+
         all_submissions = Soumission.objects.filter(
             etudiant=student
-        ).select_related('exercice', 'correction').prefetch_related('exercice__classe')
-        
-        # 2. Récupération des exercices disponibles
+        ).select_related('exercice', 'correction', 'exercice__classe').order_by('-date_soumission')
+
         all_exercises = Exercice.objects.filter(classe__etudiants=student)
         total_exercises = all_exercises.count()
-        
-        # 3. Calcul des statistiques
-        completed_count = all_submissions.filter(correction__isnull=False).count()
-        
-        # 4. Calcul de la moyenne
-        average_score = calculate_weighted_average(student)
-        
-        # 5. Prochaine échéance améliorée
-        next_deadline = get_next_deadline(student, all_exercises)
-        
-        # 6. Préparation des données
+
+        corrected_submissions = all_submissions.filter(correction__isnull=False)
+        completed_count = corrected_submissions.count()
+
+        average_score = corrected_submissions.aggregate(
+            avg_score=Avg('correction__note')
+        )['avg_score'] or 0
+
+        # ✅ Correction ici
+        next_deadline = all_exercises.filter(
+            date_limite__gte=now()
+        ).order_by('date_limite').first()
+
         stats = {
             'completed': completed_count,
             'total': total_exercises,
-            'average_score': average_score,
-            'next_deadline': next_deadline,
+            'average_score': round(average_score, 1),
+            'next_deadline': {
+                'title': next_deadline.titre if next_deadline else None,
+                'date': next_deadline.date_limite if next_deadline else None,
+                'days_left': (next_deadline.date_limite - now()).days if next_deadline else None
+            } if next_deadline else None,
             'unsubmitted_count': total_exercises - all_submissions.count(),
             'late_submissions': all_submissions.filter(en_retard=True).count()
         }
-        
+
         return Response({
             'stats': stats,
-            'recent_submissions': RecentSubmissionSerializer(
-                all_submissions.order_by('-date_soumission')[:5],
-                many=True
-            ).data
+            'all_submissions': RecentSubmissionSerializer(all_submissions, many=True).data,
+            'recent_submissions': RecentSubmissionSerializer(all_submissions[:5], many=True).data
         })
-        
+
     except Exception as e:
         logger.error(f"Dashboard error: {str(e)}", exc_info=True)
         return Response({'error': 'Une erreur est survenue'}, status=500)
+
 
 def calculate_weighted_average(student):
     """Calcule la moyenne pondérée par les coefficients"""
@@ -493,29 +571,41 @@ def update_feedback(request, correction_id):
 
 @api_view(['POST'])
 def process_ai_correction(request, soumission_id):
+    """
+    Endpoint pour lancer le traitement asynchrone avec MinIO
+    """
     try:
         soumission = Soumission.objects.get(id=soumission_id)
+        
+        if Correction.objects.filter(soumission=soumission).exists():
+            return Response(
+                {"error": "Une correction existe déjà pour cette soumission"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Lancement de la tâche Celery
+        task = process_submission.delay(soumission.id)
+        
+        return Response(
+            {
+                "message": "Correction en cours de traitement",
+                "task_id": task.id,
+                "status_endpoint": f"/api/task-status/{task.id}/"
+            },
+            status=status.HTTP_202_ACCEPTED
+        )
+
     except Soumission.DoesNotExist:
-        return Response({"error": "Soumission non trouvée."}, status=status.HTTP_404_NOT_FOUND)
-
-    try:
-        # Appeler la fonction pour obtenir la correction
-        correction = get_ai_correction(soumission.fichier_pdf.path)  # Vérifie que le fichier est accessible
+        return Response(
+            {"error": "Soumission non trouvée"},
+            status=status.HTTP_404_NOT_FOUND
+        )
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    Correction.objects.create(
-        soumission=soumission,
-        note=correction['note'],
-        feedback=correction['feedback'],
-        points_forts=correction['points_forts'],
-        points_faibles=correction['points_faibles'],
-        modele_ia_utilise='deepseek-coder:6.7b',  # S'assurer d'utiliser le modèle correct
-    )
-
-    return Response({"message": "Correction effectuée par l'IA"}, status=status.HTTP_200_OK)
-
-
+        logger.error(f"Erreur API: {str(e)}")
+        return Response(
+            {"error": "Erreur interne du serveur"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 # Gérer les retours des professeurs
@@ -868,3 +958,17 @@ class CurrentProfessorView(APIView):
             serializer = UtilisateurSerializer(user)
             return Response(serializer.data)
         return Response({"detail": "Vous n'êtes pas un professeur."}, status=status.HTTP_403_FORBIDDEN)
+    
+
+# Dans votre vue API
+class UserCorrectionsList(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # Ne retourne que les corrections de l'utilisateur connecté
+        corrections = Correction.objects.filter(
+            soumission__etudiant=request.user
+        ).select_related('soumission__exercice')
+        
+        serializer = CorrectionSerializer(corrections, many=True)
+        return Response(serializer.data)    

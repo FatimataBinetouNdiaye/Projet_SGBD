@@ -5,3 +5,4 @@ class GestionConfig(AppConfig):
 
     def ready(self):
         import gestion.signals  # 👈 important pour que les signaux soient enregistrés
+        import gestion.tasks
